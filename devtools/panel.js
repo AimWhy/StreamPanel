@@ -3,7 +3,9 @@ const state = {
   connections: {},
   selectedConnectionId: null,
   selectedMessageId: null,
-  filter: ''
+  filter: '',
+  messageFilters: [], // Applied filters
+  pendingFilters: [] // Filters being edited, not yet applied
 };
 
 // DOM elements
@@ -18,7 +20,14 @@ const elements = {
   btnClear: document.getElementById('btn-clear'),
   btnBack: document.getElementById('btn-back'),
   btnCopy: document.getElementById('btn-copy'),
-  filterInput: document.getElementById('filter-input')
+  filterInput: document.getElementById('filter-input'),
+  messageFilterContainer: document.getElementById('message-filter-container'),
+  filterConditions: document.getElementById('filter-conditions'),
+  filterStats: document.getElementById('filter-stats'),
+  btnAddFilter: document.getElementById('btn-add-filter'),
+  btnApplyFilters: document.getElementById('btn-apply-filters'),
+  btnClearFilters: document.getElementById('btn-clear-filters'),
+  btnToggleFilter: document.getElementById('btn-toggle-filter')
 };
 
 // Connect to background script
@@ -58,6 +67,7 @@ port.onMessage.addListener(function(message) {
 function handleStreamEvent(payload) {
   switch (payload.type) {
     case 'stream-connection':
+      // Always create a new connection, even if URL is duplicate
       state.connections[payload.connectionId] = {
         id: payload.connectionId,
         url: payload.url,
@@ -119,6 +129,9 @@ function renderConnectionList() {
     ? connections.filter(c => c.url.toLowerCase().includes(filter))
     : connections;
 
+  // Sort by creation time (newest first)
+  filtered.sort((a, b) => b.createdAt - a.createdAt);
+
   if (filtered.length === 0) {
     elements.connectionList.innerHTML = '<div class="empty-state">暂无连接</div>';
     return;
@@ -155,9 +168,124 @@ function renderConnectionList() {
 function selectConnection(connectionId) {
   state.selectedConnectionId = connectionId;
   state.selectedMessageId = null;
+  
+  // Sync pending filters with applied filters when switching connection
+  state.pendingFilters = JSON.parse(JSON.stringify(state.messageFilters));
+  
   renderConnectionList();
   renderMessageList();
   showListView();
+  
+  // Show filter container if filters exist
+  if (state.pendingFilters.length > 0) {
+    elements.messageFilterContainer.style.display = 'block';
+    renderFilterConditions();
+  }
+}
+
+// Extract all fields from JSON data recursively
+function extractFields(obj, prefix = '', fields = new Set()) {
+  if (obj === null || obj === undefined) {
+    return fields;
+  }
+
+  if (Array.isArray(obj)) {
+    // For arrays, check the first element if it exists
+    if (obj.length > 0 && typeof obj[0] === 'object') {
+      extractFields(obj[0], prefix, fields);
+    }
+    return fields;
+  }
+
+  if (typeof obj === 'object') {
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const fieldPath = prefix ? `${prefix}.${key}` : key;
+        fields.add(fieldPath);
+        
+        // Recursively extract nested fields
+        if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+          extractFields(obj[key], fieldPath, fields);
+        } else if (Array.isArray(obj[key]) && obj[key].length > 0 && typeof obj[key][0] === 'object') {
+          extractFields(obj[key][0], fieldPath, fields);
+        }
+      }
+    }
+  }
+
+  return fields;
+}
+
+// Get all available fields from current connection's messages
+function getAvailableFields() {
+  const connection = state.connections[state.selectedConnectionId];
+  if (!connection || !connection.messages) {
+    return [];
+  }
+
+  const fieldsSet = new Set();
+  
+  connection.messages.forEach(msg => {
+    try {
+      const parsed = JSON.parse(msg.data);
+      extractFields(parsed, '', fieldsSet);
+    } catch (e) {
+      // Not JSON, skip
+    }
+  });
+
+  return Array.from(fieldsSet).sort();
+}
+
+// Get nested field value from object using dot notation
+function getNestedValue(obj, path) {
+  const keys = path.split('.');
+  let value = obj;
+  
+  for (const key of keys) {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    value = value[key];
+  }
+  
+  return value;
+}
+
+// Filter messages based on current filters
+function filterMessages(messages) {
+  if (state.messageFilters.length === 0) {
+    return messages;
+  }
+
+  return messages.filter(msg => {
+    try {
+      const parsed = JSON.parse(msg.data);
+      
+      // All filters must match (AND logic)
+      return state.messageFilters.every(filter => {
+        const fieldValue = getNestedValue(parsed, filter.field);
+        
+        if (fieldValue === undefined) {
+          return false;
+        }
+
+        const fieldValueStr = String(fieldValue);
+        const filterValueStr = String(filter.value);
+
+        if (filter.mode === 'equals') {
+          return fieldValueStr === filterValueStr;
+        } else if (filter.mode === 'contains') {
+          return fieldValueStr.includes(filterValueStr);
+        }
+        
+        return true;
+      });
+    } catch (e) {
+      // Not JSON, skip filtering for this message
+      return false;
+    }
+  });
 }
 
 // Render message list
@@ -174,7 +302,13 @@ function renderMessageList() {
   elements.messageEmpty.style.display = 'none';
   elements.messageTbody.parentElement.style.display = 'flex';
 
-  elements.messageTbody.innerHTML = connection.messages.map(msg => {
+  // Apply filters
+  const filteredMessages = filterMessages(connection.messages);
+  
+  // Update filter stats
+  updateFilterStats(filteredMessages.length, connection.messages.length);
+
+  elements.messageTbody.innerHTML = filteredMessages.map(msg => {
     const time = formatTime(msg.timestamp);
 
     return `
@@ -193,6 +327,11 @@ function renderMessageList() {
       showMessageDetail(parseInt(row.dataset.id));
     });
   });
+
+  // Update filter UI if filters exist
+  if (state.messageFilters.length > 0) {
+    renderFilterConditions();
+  }
 }
 
 // Show message detail
@@ -265,6 +404,146 @@ elements.filterInput.addEventListener('input', (e) => {
   state.filter = e.target.value;
   renderConnectionList();
 });
+
+// Add filter condition
+function addFilterCondition() {
+  const availableFields = getAvailableFields();
+  if (availableFields.length === 0) {
+    alert('当前没有可用的字段，请先选择连接并等待消息数据。');
+    return;
+  }
+
+  state.pendingFilters.push({
+    field: availableFields[0] || '',
+    mode: 'equals',
+    value: ''
+  });
+
+  elements.messageFilterContainer.style.display = 'block';
+  renderFilterConditions();
+}
+
+// Remove filter condition
+function removeFilterCondition(index) {
+  state.pendingFilters.splice(index, 1);
+  renderFilterConditions();
+}
+
+// Clear all filters
+function clearAllFilters() {
+  state.pendingFilters = [];
+  state.messageFilters = [];
+  elements.messageFilterContainer.style.display = 'none';
+  renderFilterConditions();
+  renderMessageList();
+}
+
+// Apply filters
+function applyFilters() {
+  // Copy pending filters to active filters
+  state.messageFilters = JSON.parse(JSON.stringify(state.pendingFilters));
+  renderMessageList();
+}
+
+// Update pending filter condition
+function updatePendingFilterCondition(index, field, mode, value) {
+  if (state.pendingFilters[index]) {
+    state.pendingFilters[index].field = field;
+    state.pendingFilters[index].mode = mode;
+    state.pendingFilters[index].value = value;
+  }
+}
+
+// Render filter conditions
+function renderFilterConditions() {
+  const availableFields = getAvailableFields();
+  
+  elements.filterConditions.innerHTML = state.pendingFilters.map((filter, index) => {
+    const fieldOptions = availableFields.map(field => 
+      `<option value="${escapeHtml(field)}" ${filter.field === field ? 'selected' : ''}>${escapeHtml(field)}</option>`
+    ).join('');
+
+    return `
+      <div class="filter-row" data-index="${index}">
+        <select class="filter-field-select" data-index="${index}">
+          ${fieldOptions}
+        </select>
+        <select class="filter-mode-select" data-index="${index}">
+          <option value="equals" ${filter.mode === 'equals' ? 'selected' : ''}>全等</option>
+          <option value="contains" ${filter.mode === 'contains' ? 'selected' : ''}>包含</option>
+        </select>
+        <input type="text" class="filter-value-input" data-index="${index}" 
+               placeholder="输入筛选值..." value="${escapeHtml(filter.value)}">
+        <button class="filter-remove-btn" data-index="${index}" title="删除">×</button>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners
+  elements.filterConditions.querySelectorAll('.filter-field-select').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const index = parseInt(e.target.dataset.index);
+      const filter = state.pendingFilters[index];
+      updatePendingFilterCondition(index, e.target.value, filter.mode, filter.value);
+    });
+  });
+
+  elements.filterConditions.querySelectorAll('.filter-mode-select').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const index = parseInt(e.target.dataset.index);
+      const filter = state.pendingFilters[index];
+      updatePendingFilterCondition(index, filter.field, e.target.value, filter.value);
+    });
+  });
+
+  elements.filterConditions.querySelectorAll('.filter-value-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const index = parseInt(e.target.dataset.index);
+      const filter = state.pendingFilters[index];
+      updatePendingFilterCondition(index, filter.field, filter.mode, e.target.value);
+    });
+    
+    // Support Enter key to apply filters
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        applyFilters();
+      }
+    });
+  });
+
+  elements.filterConditions.querySelectorAll('.filter-remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt(e.target.dataset.index);
+      removeFilterCondition(index);
+    });
+  });
+}
+
+// Update filter stats
+function updateFilterStats(filteredCount, totalCount) {
+  if (state.messageFilters.length === 0) {
+    elements.filterStats.textContent = '';
+    return;
+  }
+
+  if (filteredCount === totalCount) {
+    elements.filterStats.textContent = `显示全部 ${totalCount} 条消息`;
+  } else {
+    elements.filterStats.textContent = `显示 ${filteredCount}/${totalCount} 条消息`;
+  }
+}
+
+// Toggle filter container visibility
+function toggleFilterContainer() {
+  const isHidden = elements.messageFilterContainer.style.display === 'none';
+  elements.messageFilterContainer.style.display = isHidden ? 'block' : 'none';
+}
+
+// Event handlers for filter buttons
+elements.btnToggleFilter.addEventListener('click', toggleFilterContainer);
+elements.btnAddFilter.addEventListener('click', addFilterCondition);
+elements.btnApplyFilters.addEventListener('click', applyFilters);
+elements.btnClearFilters.addEventListener('click', clearAllFilters);
 
 // Resizer functionality
 const resizer = document.querySelector('.resizer');

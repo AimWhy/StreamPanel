@@ -37,7 +37,28 @@
     <div class="right-panel">
       <!-- Message List View -->
       <div id="message-list-view" class="view active">
-        <div class="panel-header">消息列表</div>
+        <div class="panel-header">
+          <span style="flex: 1;">消息列表</span>
+          <button id="btn-toggle-filter" style="padding: 4px 8px; height: 20px; display: flex; align-items: center; gap: 4px;" title="显示/隐藏筛选器">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            筛选
+          </button>
+        </div>
+        <!-- Message Filter Container -->
+        <div id="message-filter-container" class="message-filter-container" style="display: none;">
+          <div class="filter-header">
+            <span class="filter-title">消息筛选</span>
+            <div class="filter-actions">
+              <button id="btn-add-filter" class="filter-btn">添加筛选条件</button>
+              <button id="btn-apply-filters" class="filter-btn filter-btn-primary">应用筛选</button>
+              <button id="btn-clear-filters" class="filter-btn">清除所有</button>
+            </div>
+          </div>
+          <div id="filter-conditions" class="filter-conditions"></div>
+          <div id="filter-stats" class="filter-stats"></div>
+        </div>
         <div class="message-table-container">
           <div class="message-table" id="message-table">
             <!-- Header -->

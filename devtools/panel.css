@@ -113,6 +113,9 @@ html, body {
 }
 
 .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 12px;
   font-weight: 600;
   font-size: 11px;
@@ -120,6 +123,7 @@ html, body {
   color: var(--text-secondary);
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  height: 32px;
 }
 
 .connection-list {
@@ -219,6 +223,7 @@ html, body {
   display: none;
   flex-direction: column;
   height: 100%;
+  min-height: 0; /* Important: allows flex children to shrink below content size */
 }
 
 .view.active {
@@ -232,6 +237,7 @@ html, body {
   width: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0; /* Important: allows flex children to shrink below content size */
 }
 
 .message-table {
@@ -460,4 +466,140 @@ html, body {
   font-size: 10px;
   color: var(--text-muted);
   margin-left: 4px;
+}
+
+/* Message Filter Container */
+.message-filter-container {
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  padding: 8px 12px;
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.filter-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+.filter-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.filter-btn-primary {
+  background-color: var(--accent-color);
+  color: #fff;
+  border-color: var(--accent-color);
+}
+
+.filter-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.filter-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.filter-field-select,
+.filter-mode-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+
+.filter-field-select {
+  flex: 1;
+  min-width: 120px;
+}
+
+.filter-mode-select {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.filter-value-input {
+  flex: 1;
+  min-width: 100px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+}
+
+.filter-value-input:focus,
+.filter-field-select:focus,
+.filter-mode-select:focus {
+  border-color: var(--accent-color);
+}
+
+.filter-remove-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--error-color);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-remove-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.filter-stats {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-muted);
 }
