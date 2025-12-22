@@ -4,6 +4,14 @@ const devtoolsConnections = new Map();
 // Store stream data per tab
 const tabData = new Map();
 
+const DEBUG = false; // Set to true for debugging
+
+function log(...args) {
+  if (DEBUG) {
+    console.log('[Stream Panel Background]', ...args);
+  }
+}
+
 // Handle connections from DevTools panels
 chrome.runtime.onConnect.addListener(function(port) {
   if (port.name !== 'stream-panel') return;
@@ -46,6 +54,8 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
   const payload = message.payload;
 
+  log('Received message:', payload.type, 'for tab', tabId, payload);
+
   // Initialize tab data if needed
   if (!tabData.has(tabId)) {
     tabData.set(tabId, { connections: {} });
@@ -65,11 +75,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
         createdAt: payload.timestamp,
         messages: []
       };
+      log('Created connection:', payload.connectionId);
       break;
 
     case 'stream-open':
       if (data.connections[payload.connectionId]) {
         data.connections[payload.connectionId].status = 'open';
+        log('Connection opened:', payload.connectionId);
       }
       break;
 
@@ -82,6 +94,11 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
           lastEventId: payload.lastEventId,
           timestamp: payload.timestamp
         });
+        log('Stored message #' + payload.messageId + ' for connection:', payload.connectionId);
+      } else {
+        if (DEBUG) {
+          console.warn('[Stream Panel Background] Message received for unknown connection:', payload.connectionId);
+        }
       }
       break;
 
@@ -106,9 +123,15 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
         type: 'stream-event',
         payload: payload
       });
+      log('Forwarded to DevTools panel');
     } catch (e) {
       devtoolsConnections.delete(tabId);
+      if (DEBUG) {
+        console.error('[Stream Panel Background] Failed to forward to DevTools:', e);
+      }
     }
+  } else {
+    log('No DevTools panel connected for tab:', tabId);
   }
 });
 

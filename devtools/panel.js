@@ -10,6 +10,14 @@ const state = {
   searchQuery: '' // Message search query
 };
 
+const DEBUG = false; // Set to true for debugging
+
+function log(...args) {
+  if (DEBUG) {
+    console.log('[Stream Panel DevTools]', ...args);
+  }
+}
+
 // DOM elements
 const elements = {
   connectionList: document.getElementById('connection-list'),
@@ -62,10 +70,13 @@ port.postMessage({
 
 // Handle messages from background
 port.onMessage.addListener(function(message) {
+  log('Received message:', message.type, message);
+
   switch (message.type) {
     case 'init-data':
       // Initialize with existing data
       state.connections = message.data.connections || {};
+      log('Initialized with', Object.keys(state.connections).length, 'connections');
       renderConnectionList();
       break;
 
@@ -87,6 +98,8 @@ port.onMessage.addListener(function(message) {
 
 // Handle stream events
 function handleStreamEvent(payload) {
+  log('Handling stream event:', payload.type, payload);
+
   switch (payload.type) {
     case 'stream-connection':
       // Always create a new connection, even if URL is duplicate
@@ -100,13 +113,19 @@ function handleStreamEvent(payload) {
         createdAt: payload.timestamp,
         messages: []
       };
+      log('Created connection:', payload.connectionId, payload.url);
       renderConnectionList();
       break;
 
     case 'stream-open':
       if (state.connections[payload.connectionId]) {
         state.connections[payload.connectionId].status = 'open';
+        log('Connection opened:', payload.connectionId);
         renderConnectionList();
+      } else {
+        if (DEBUG) {
+          console.warn('[Stream Panel DevTools] stream-open for unknown connection:', payload.connectionId);
+        }
       }
       break;
 
@@ -119,9 +138,14 @@ function handleStreamEvent(payload) {
           lastEventId: payload.lastEventId,
           timestamp: payload.timestamp
         });
+        log('Added message #' + payload.messageId + ' to connection:', payload.connectionId);
         renderConnectionList();
         if (state.selectedConnectionId === payload.connectionId) {
           renderMessageList();
+        }
+      } else {
+        if (DEBUG) {
+          console.warn('[Stream Panel DevTools] stream-message for unknown connection:', payload.connectionId);
         }
       }
       break;
@@ -188,7 +212,7 @@ function renderConnectionList() {
 
     return `
       <div class="connection-item ${isSelected ? 'selected' : ''}" data-id="${conn.id}">
-        <div class="connection-url">${escapeHtml(urlPath)}</div>
+        <div class="connection-url" title="${escapeHtml(conn.url)}">${escapeHtml(urlPath)}</div>
         <div class="connection-meta">
           <span class="status-dot ${statusClass}"></span>
           <span class="connection-badge ${badgeClass}">${badgeText}</span>
@@ -208,16 +232,26 @@ function renderConnectionList() {
 
 // Select a connection
 function selectConnection(connectionId) {
+  // If clicking the same connection, deselect it
+  if (state.selectedConnectionId === connectionId) {
+    state.selectedConnectionId = null;
+    state.selectedMessageId = null;
+    renderConnectionList();
+    renderMessageList();
+    showListView();
+    return;
+  }
+
   state.selectedConnectionId = connectionId;
   state.selectedMessageId = null;
-  
+
   // Sync pending filters with applied filters when switching connection
   state.pendingFilters = JSON.parse(JSON.stringify(state.messageFilters));
-  
+
   renderConnectionList();
   renderMessageList();
   showListView();
-  
+
   // Show filter container if filters exist
   if (state.pendingFilters.length > 0) {
     elements.messageFilterContainer.style.display = 'block';

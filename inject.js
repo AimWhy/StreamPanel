@@ -192,21 +192,23 @@
       return response;
     }
 
-    log('Detected streaming response!', {isSSE, isNDJSON});
+    log('Detected streaming response!', {isSSE, isNDJSON, url: fullUrl});
 
     const connectionId = generateId();
     let messageIndex = 0;
     const streamType = isSSE ? 'SSE' : 'NDJSON';
 
     // Notify new connection
-    postToContentScript({
+    const connectionPayload = {
       type: 'stream-connection',
       connectionId: connectionId,
       url: fullUrl,
       timestamp: Date.now(),
       readyState: 1,
       source: `fetch (${streamType})`
-    });
+    };
+    log('Posting connection:', connectionPayload);
+    postToContentScript(connectionPayload);
 
     log('Created connection:', connectionId, streamType);
 
@@ -220,8 +222,11 @@
 
     // Clone body to intercept
     if (!response.body) {
+      log('ERROR: Response body is null! Cannot intercept stream.');
       return response;
     }
+
+    log('Response body exists, creating reader...');
 
     const originalBody = response.body;
     const reader = originalBody.getReader();
@@ -293,9 +298,10 @@
                 buffer = buffer.substring(doubleNewlineIndex + 2);
 
                 const events = parseSSEEvents(completeData);
+                log('Parsed SSE events:', events.length, 'from', completeData.length, 'bytes');
                 for (const event of events) {
                   messageIndex++;
-                  postToContentScript({
+                  const messagePayload = {
                     type: 'stream-message',
                     connectionId: connectionId,
                     messageId: messageIndex,
@@ -303,7 +309,9 @@
                     data: event.data,
                     lastEventId: event.id,
                     timestamp: Date.now()
-                  });
+                  };
+                  log('Posting message #' + messageIndex + ':', event.event);
+                  postToContentScript(messagePayload);
                 }
               }
             } else if (isNDJSON) {

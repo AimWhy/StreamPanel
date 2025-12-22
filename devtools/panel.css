@@ -180,9 +180,11 @@ html, body {
 
 .connection-url {
   font-size: 12px;
-  word-break: break-all;
   color: var(--text-primary);
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .connection-meta {

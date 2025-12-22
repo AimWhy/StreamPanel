@@ -1,5 +1,13 @@
 // Inject the interceptor script into the page
 (function() {
+  const DEBUG = false; // Set to true for debugging
+
+  function log(...args) {
+    if (DEBUG) {
+      console.log('[Stream Panel Content]', ...args);
+    }
+  }
+
   const script = document.createElement('script');
   script.src = chrome.runtime.getURL('inject.js');
   script.onload = function() {
@@ -21,6 +29,13 @@
 // Determine if current context is an iframe
 const isIframe = window !== window.top;
 const frameUrl = window.location.href;
+const DEBUG = false; // Set to true for debugging
+
+function log(...args) {
+  if (DEBUG) {
+    console.log('[Stream Panel Content]', ...args);
+  }
+}
 
 // Listen for messages from injected script
 window.addEventListener('message', function(event) {
@@ -32,6 +47,8 @@ window.addEventListener('message', function(event) {
 
   const payload = event.data.payload;
 
+  log('Received message from inject:', payload.type, payload);
+
   // Add frame information
   payload.isIframe = isIframe;
   payload.frameUrl = frameUrl;
@@ -42,6 +59,7 @@ window.addEventListener('message', function(event) {
       source: 'stream-panel-content',
       payload: payload
     });
+    log('Forwarded to background');
   } catch (e) {
     // Extension context may be invalidated
     console.warn('[Stream Panel] Failed to send message:', e.message);
