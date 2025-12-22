@@ -27,7 +27,11 @@ const elements = {
   btnAddFilter: document.getElementById('btn-add-filter'),
   btnApplyFilters: document.getElementById('btn-apply-filters'),
   btnClearFilters: document.getElementById('btn-clear-filters'),
-  btnToggleFilter: document.getElementById('btn-toggle-filter')
+  btnToggleFilter: document.getElementById('btn-toggle-filter'),
+  // Export elements
+  exportDropdown: document.querySelector('.export-dropdown'),
+  btnExport: document.getElementById('btn-export'),
+  exportMenu: document.getElementById('export-menu')
 };
 
 // Connect to background script
@@ -764,3 +768,282 @@ renderConnectionList();
     document.removeEventListener('mouseup', onMouseUp);
   }
 })();
+
+// ============================================
+// Export Functionality
+// ============================================
+
+// Toggle export dropdown
+function toggleExportDropdown() {
+  elements.exportDropdown.classList.toggle('open');
+}
+
+// Close export dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!elements.exportDropdown.contains(e.target)) {
+    elements.exportDropdown.classList.remove('open');
+  }
+});
+
+// Format timestamp for export
+function formatTimestampForExport(timestamp) {
+  const date = new Date(timestamp);
+  return date.toISOString();
+}
+
+// Get export data for current connection
+function getCurrentConnectionExportData() {
+  const connection = state.connections[state.selectedConnectionId];
+  if (!connection) {
+    return null;
+  }
+
+  // Apply filters if any
+  const messages = filterMessages(connection.messages);
+
+  return {
+    connection: {
+      id: connection.id,
+      url: connection.url,
+      frameUrl: connection.frameUrl,
+      isIframe: connection.isIframe,
+      status: connection.status,
+      createdAt: formatTimestampForExport(connection.createdAt)
+    },
+    messages: messages.map(msg => ({
+      id: msg.id,
+      eventType: msg.eventType,
+      data: msg.data,
+      lastEventId: msg.lastEventId,
+      timestamp: formatTimestampForExport(msg.timestamp)
+    })),
+    exportedAt: new Date().toISOString(),
+    totalMessages: messages.length,
+    appliedFilters: state.messageFilters.length > 0 ? state.messageFilters : null
+  };
+}
+
+// Get export data for all connections
+function getAllConnectionsExportData() {
+  const connections = Object.values(state.connections);
+  if (connections.length === 0) {
+    return null;
+  }
+
+  return {
+    connections: connections.map(conn => ({
+      id: conn.id,
+      url: conn.url,
+      frameUrl: conn.frameUrl,
+      isIframe: conn.isIframe,
+      status: conn.status,
+      createdAt: formatTimestampForExport(conn.createdAt),
+      messages: conn.messages.map(msg => ({
+        id: msg.id,
+        eventType: msg.eventType,
+        data: msg.data,
+        lastEventId: msg.lastEventId,
+        timestamp: formatTimestampForExport(msg.timestamp)
+      })),
+      messageCount: conn.messages.length
+    })),
+    exportedAt: new Date().toISOString(),
+    totalConnections: connections.length,
+    totalMessages: connections.reduce((sum, conn) => sum + conn.messages.length, 0)
+  };
+}
+
+// Export to JSON
+function exportToJSON(data, filename) {
+  const jsonStr = JSON.stringify(data, null, 2);
+  downloadFile(jsonStr, filename, 'application/json');
+}
+
+// Convert messages to CSV format
+function messagesToCSV(messages, connectionInfo = null) {
+  const headers = ['ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
+  if (connectionInfo) {
+    headers.unshift('ConnectionURL', 'ConnectionID');
+  }
+
+  const rows = messages.map(msg => {
+    // Escape double quotes and wrap in quotes if contains comma/newline/quote
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) {
+        return '';
+      }
+      const str = String(value);
+      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    const row = [
+      escapeCSV(msg.id),
+      escapeCSV(msg.eventType),
+      escapeCSV(msg.data),
+      escapeCSV(msg.lastEventId),
+      escapeCSV(msg.timestamp)
+    ];
+
+    if (connectionInfo) {
+      row.unshift(escapeCSV(connectionInfo.url), escapeCSV(connectionInfo.id));
+    }
+
+    return row.join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// Export current connection to CSV
+function exportCurrentToCSV() {
+  const connection = state.connections[state.selectedConnectionId];
+  if (!connection) {
+    alert('请先选择一个连接');
+    return;
+  }
+
+  const messages = filterMessages(connection.messages);
+  if (messages.length === 0) {
+    alert('当前连接没有消息可导出');
+    return;
+  }
+
+  const formattedMessages = messages.map(msg => ({
+    ...msg,
+    timestamp: formatTimestampForExport(msg.timestamp)
+  }));
+
+  const csv = messagesToCSV(formattedMessages);
+  const filename = `stream-messages-${connection.id.substring(0, 8)}-${Date.now()}.csv`;
+  downloadFile(csv, filename, 'text/csv');
+}
+
+// Export all connections to CSV
+function exportAllToCSV() {
+  const connections = Object.values(state.connections);
+  if (connections.length === 0) {
+    alert('没有连接数据可导出');
+    return;
+  }
+
+  const allMessages = [];
+  connections.forEach(conn => {
+    conn.messages.forEach(msg => {
+      allMessages.push({
+        ...msg,
+        timestamp: formatTimestampForExport(msg.timestamp),
+        connectionUrl: conn.url,
+        connectionId: conn.id
+      });
+    });
+  });
+
+  if (allMessages.length === 0) {
+    alert('没有消息数据可导出');
+    return;
+  }
+
+  // Build CSV with connection info
+  const headers = ['ConnectionID', 'ConnectionURL', 'ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
+  const rows = allMessages.map(msg => {
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    return [
+      escapeCSV(msg.connectionId),
+      escapeCSV(msg.connectionUrl),
+      escapeCSV(msg.id),
+      escapeCSV(msg.eventType),
+      escapeCSV(msg.data),
+      escapeCSV(msg.lastEventId),
+      escapeCSV(msg.timestamp)
+    ].join(',');
+  });
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const filename = `stream-all-messages-${Date.now()}.csv`;
+  downloadFile(csv, filename, 'text/csv');
+}
+
+// Download file helper
+function downloadFile(content, filename, mimeType) {
+  // Add UTF-8 BOM for CSV files to ensure proper encoding in Excel
+  const bom = mimeType === 'text/csv' ? '\uFEFF' : '';
+  const blob = new Blob([bom + content], { type: mimeType + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+
+  // Cleanup
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+
+// Handle export action
+function handleExport(exportType) {
+  elements.exportDropdown.classList.remove('open');
+
+  switch (exportType) {
+    case 'current-json': {
+      const data = getCurrentConnectionExportData();
+      if (!data) {
+        alert('请先选择一个连接');
+        return;
+      }
+      const filename = `stream-${data.connection.id.substring(0, 8)}-${Date.now()}.json`;
+      exportToJSON(data, filename);
+      break;
+    }
+
+    case 'current-csv': {
+      exportCurrentToCSV();
+      break;
+    }
+
+    case 'all-json': {
+      const data = getAllConnectionsExportData();
+      if (!data) {
+        alert('没有连接数据可导出');
+        return;
+      }
+      const filename = `stream-all-${Date.now()}.json`;
+      exportToJSON(data, filename);
+      break;
+    }
+
+    case 'all-csv': {
+      exportAllToCSV();
+      break;
+    }
+  }
+}
+
+// Export event listeners
+elements.btnExport.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleExportDropdown();
+});
+
+elements.exportMenu.querySelectorAll('.export-menu-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const exportType = item.dataset.export;
+    handleExport(exportType);
+  });
+});
