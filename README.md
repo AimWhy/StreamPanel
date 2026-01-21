@@ -12,32 +12,39 @@
 
 ### Features
 
-- 🔍 **Real-time Monitoring**: Intercept and display all EventSource and Fetch-based SSE connections
-- 📊 **Message Inspection**: View detailed message data with JSON syntax highlighting
-- 🔗 **Connection Management**: Track multiple streaming connections simultaneously
-- 🎯 **URL Filtering**: Filter connections by URL to focus on specific endpoints
-- 🔎 **Message Filtering**: Filter messages by JSON field values with autocomplete field selector
-  - Equals/contains match modes
-  - Multiple filter conditions with AND logic
-  - Nested field support (dot notation)
-  - Real-time filter statistics
-- 🔍 **Advanced Message Search**: Full-text search across all message content with keyword highlighting
-- 💾 **Data Export**: Export captured data in JSON or CSV format
-  - Export current connection or all connections
-  - UTF-8 BOM support for proper encoding in Excel
-  - Filtered data export support
-- 📋 **Filter Presets**: Save and manage custom filter configurations
-  - Save current filter conditions as reusable presets
-  - Load saved presets instantly
-  - Manage preset library (delete, rename)
-- 🔄 **Message Replay**: Copy message data for replay and testing
-- 📈 **Connection Statistics**: View comprehensive analytics
-  - Total connections and message counts
-  - Active connection monitoring
-  - Per-connection statistics with duration tracking
-- 🖼️ **Iframe Support**: Monitor streaming connections in both main page and iframes
-- 📐 **Resizable Columns**: Adjust table column widths for better readability
-- 🌓 **Dark Mode**: Automatic dark mode support based on system preferences
+ - 🔍 **Real-time Monitoring**: Intercept and display all EventSource, Fetch-based SSE, and XMLHttpRequest connections
+ - 📊 **Message Inspection**: View detailed message data with JSON syntax highlighting
+ - 🔗 **Connection Management**: Track multiple streaming connections simultaneously
+ - 🎯 **URL Filtering**: Filter connections by URL to focus on specific endpoints
+ - 🏷️ **Request Type Badge**: Visual indicators for connection types (EventSource, Fetch, XMLHttpRequest)
+ - 🔎 **Message Filtering**: Filter messages by JSON field values with autocomplete field selector
+   - Equals/contains match modes
+   - Multiple filter conditions with AND logic
+   - Nested field support (dot notation)
+   - Real-time filter statistics
+ - 🔍 **Advanced Message Search**: Full-text search across all message content with keyword highlighting
+ - 💾 **Data Export**: Export captured data in JSON or CSV format
+   - Export current connection or all connections
+   - UTF-8 BOM support for proper encoding in Excel
+   - Filtered data export support
+ - 📋 **Filter Presets**: Save and manage custom filter configurations
+   - Save current filter conditions as reusable presets
+   - Load saved presets instantly
+   - Manage preset library (delete, rename)
+ - 📈 **Connection Statistics**: View comprehensive analytics
+   - Total connections and message counts
+   - Active connection monitoring
+   - Per-connection statistics with duration tracking
+ - 🖼️ **Iframe Support**: Monitor streaming connections in both main page and iframes with visual indicators
+ - 💾 **Connection Persistence**: Save and load connections using IndexedDB storage
+   - Save connection data with custom names
+   - Load saved connections for later inspection
+   - Import/export connection configurations
+ - 📌 **Message Pinning**: Pin important messages to keep them at the top of the list
+ - 📜 **Auto Scroll**: Auto-scroll to latest messages (toggleable)
+ - 📐 **Resizable Columns**: Adjust table column widths for better readability
+ - 🌓 **Dark Mode**: Automatic dark mode support based on system preferences
+ - 🚀 **Performance Optimization**: Efficient rendering with virtualization and event delegation for large message lists
 
 ### Installation
 
@@ -185,6 +192,7 @@ npm run watch
 - `devtools/panel.js` - ES Modules entry point (source)
 
 For detailed documentation, see:
+- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) - Complete project documentation and architecture
 - [START.md](START.md) - Quick start guide
 - [docs/BUNDLED_VERSION_GUIDE.md](docs/BUNDLED_VERSION_GUIDE.md) - Complete guide
 - [docs/modularization-refactor.md](docs/modularization-refactor.md) - Technical documentation
@@ -198,7 +206,10 @@ For detailed documentation, see:
 - [x] Custom filter presets
 - [x] Message replay functionality
 - [x] Connection statistics and analytics
-- [ ] WebSocket monitoring support
+- [x] Connection persistence (IndexedDB)
+- [x] Message pinning and auto-scroll
+- [x] XMLHttpRequest interception
+- [x] Performance optimization for large message lists
 
 ### Contributing
 
@@ -220,32 +231,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 功能特性
 
-- 🔍 **实时监控**：拦截并显示所有 EventSource 和基于 Fetch 的 SSE 连接
-- 📊 **消息检查**：查看详细的消息数据，支持 JSON 语法高亮
-- 🔗 **连接管理**：同时跟踪多个流式连接
-- 🎯 **URL 过滤**：按 URL 过滤连接，专注于特定端点
-- 🔎 **消息筛选**：根据 JSON 字段值筛选消息，支持自动完成字段选择器
-  - 全等/包含匹配模式
-  - 多条件筛选，使用 AND 逻辑
-  - 嵌套字段支持（点号表示法）
-  - 实时筛选统计
-- 🔍 **高级消息搜索**：在所有消息内容中进行全文搜索，支持关键词高亮
-- 💾 **数据导出**：支持 JSON 或 CSV 格式导出捕获的数据
-  - 导出当前连接或所有连接
-  - UTF-8 BOM 支持，确保 Excel 正确编码
-  - 支持导出筛选后的数据
-- 📋 **筛选预设**：保存和管理自定义筛选配置
-  - 将当前筛选条件保存为可复用预设
-  - 快速加载已保存的预设
-  - 管理预设库（删除、重命名）
-- 🔄 **消息重放**：复制消息数据用于重放和测试
-- 📈 **连接统计**：查看全面的分析数据
-  - 总连接数和消息统计
-  - 活跃连接监控
-  - 每个连接的详细统计和持续时间追踪
-- 🖼️ **Iframe 支持**：监控主页面和 iframe 中的流式连接
-- 📐 **可调整列宽**：调整表格列宽以提高可读性
-- 🌓 **深色模式**：根据系统偏好自动支持深色模式
+ - 🔍 **实时监控**：拦截并显示所有 EventSource、基于 Fetch 的 SSE 和 XMLHttpRequest 连接
+ - 📊 **消息检查**：查看详细的消息数据，支持 JSON 语法高亮
+ - 🔗 **连接管理**：同时跟踪多个流式连接
+ - 🎯 **URL 过滤**：按 URL 过滤连接，专注于特定端点
+ - 🏷️ **请求类型标识**：可视化的连接类型标识（EventSource、Fetch、XMLHttpRequest）
+ - 🔎 **消息筛选**：根据 JSON 字段值筛选消息，支持自动完成字段选择器
+   - 全等/包含匹配模式
+   - 多条件筛选，使用 AND 逻辑
+   - 嵌套字段支持（点号表示法）
+   - 实时筛选统计
+ - 🔍 **高级消息搜索**：在所有消息内容中进行全文搜索，支持关键词高亮
+ - 💾 **数据导出**：支持 JSON 或 CSV 格式导出捕获的数据
+   - 导出当前连接或所有连接
+   - UTF-8 BOM 支持，确保 Excel 正确编码
+   - 支持导出筛选后的数据
+ - 📋 **筛选预设**：保存和管理自定义筛选配置
+   - 将当前筛选条件保存为可复用预设
+   - 快速加载已保存的预设
+   - 管理预设库（删除、重命名）
+ - 📈 **连接统计**：查看全面的分析数据
+   - 总连接数和消息统计
+   - 活跃连接监控
+   - 每个连接的详细统计和持续时间追踪
+ - 🖼️ **Iframe 支持**：监控主页面和 iframe 中的流式连接，带有可视化标识
+ - 💾 **连接持久化**：使用 IndexedDB 存储保存和加载连接
+   - 保存连接数据并自定义名称
+   - 加载已保存的连接以便后续检查
+   - 导入/导出连接配置
+ - 📌 **消息置顶**：固定重要消息，使其保持在列表顶部
+ - 📜 **自动滚动**：自动滚动到最新消息（可切换）
+ - 📐 **可调整列宽**：调整表格列宽以提高可读性
+ - 🌓 **深色模式**：根据系统偏好自动支持深色模式
+ - 🚀 **性能优化**：高效渲染，使用虚拟化和事件委托处理大量消息列表
 
 ### 安装方法
 
@@ -393,6 +411,7 @@ npm run watch
 - `devtools/panel.js` - ES Modules 入口（源码）
 
 详细文档请查看：
+- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) - 完整项目文档和架构说明
 - [START.md](START.md) - 快速开始指南
 - [docs/BUNDLED_VERSION_GUIDE.md](docs/BUNDLED_VERSION_GUIDE.md) - 完整指南
 - [docs/modularization-refactor.md](docs/modularization-refactor.md) - 技术文档
@@ -406,7 +425,10 @@ npm run watch
 - [x] 自定义筛选预设
 - [x] 消息重放功能
 - [x] 连接统计和分析
-- [ ] WebSocket 监控支持
+- [x] 连接持久化（IndexedDB）
+- [x] 消息置顶和自动滚动
+- [x] XMLHttpRequest 拦截
+- [x] 大量消息列表的性能优化
 
 ### 贡献
 
