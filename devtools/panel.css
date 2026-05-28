@@ -163,6 +163,11 @@ html, body {
   border-color: var(--accent-color);
 }
 
+.text-decode-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 /* Main Container */
 .main-container {
   display: flex;
@@ -305,6 +310,36 @@ html, body {
   gap: 12px;
   max-height: 400px;
   overflow-y: auto;
+}
+
+.text-decode-modal-content {
+  width: min(680px, calc(100vw - 40px));
+}
+
+.text-decode-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-decode-textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.text-decode-textarea:focus {
+  border-color: var(--accent-color);
 }
 
 .saved-connection-card {

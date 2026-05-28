@@ -95,6 +95,15 @@
       <option value="eventsource">EventSource</option>
     </select>
     <input type="text" id="filter-input" class="filter-input" placeholder="过滤 URL...">
+    <button id="btn-text-decode" class="toolbar-btn text-decode-btn" title="文字转义 / Unicode 解码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 7h16"></path>
+        <path d="M9 7c0 7-2 10-5 12"></path>
+        <path d="M10 13c2 3 5 5 9 6"></path>
+        <path d="M12 4l1 3"></path>
+      </svg>
+      文字转义
+    </button>
   </div>
 
   <!-- Main Container -->
@@ -320,6 +329,33 @@
       <div class="modal-footer">
         <button class="modal-btn" id="btn-delete-all-saved" style="margin-right: auto;">全部删除</button>
         <button class="modal-btn primary" id="btn-close-saved-modal">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Text Decode Modal -->
+  <div id="text-decode-modal" class="modal" style="display: none;">
+    <div class="modal-content text-decode-modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">文字转义</h3>
+        <button class="modal-close" id="text-decode-modal-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="text-decode-form">
+          <label class="form-label" for="text-decode-input">输入</label>
+          <textarea id="text-decode-input" class="text-decode-textarea" placeholder='例如 "\u63a8\u7406\u601d\u8003"'></textarea>
+          <label class="form-label" for="text-decode-output">结果</label>
+          <textarea id="text-decode-output" class="text-decode-textarea" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn" id="text-decode-clear-btn">清空</button>
+        <button class="modal-btn primary" id="text-decode-copy-btn">复制结果</button>
       </div>
     </div>
   </div>

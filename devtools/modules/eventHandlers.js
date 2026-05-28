@@ -32,6 +32,7 @@ export function initEventHandlers(el, connectionPort) {
   setupDetailHandlers();
   setupResizerHandlers();
   setupSearchHandlers();
+  setupTextDecodeHandlers();
   setupModalClickHandlers();
 }
 
@@ -251,6 +252,67 @@ function setupSearchHandlers() {
   });
 }
 
+function setupTextDecodeHandlers() {
+  elements.btnTextDecode.addEventListener('click', () => {
+    elements.textDecodeModal.style.display = 'flex';
+    elements.textDecodeInput.focus();
+    updateTextDecodeOutput();
+  });
+
+  elements.textDecodeModalClose.addEventListener('click', closeTextDecodeModal);
+
+  elements.textDecodeInput.addEventListener('input', updateTextDecodeOutput);
+
+  elements.textDecodeClearBtn.addEventListener('click', () => {
+    elements.textDecodeInput.value = '';
+    elements.textDecodeOutput.value = '';
+    elements.textDecodeInput.focus();
+  });
+
+  elements.textDecodeCopyBtn.addEventListener('click', async () => {
+    const success = await copyToClipboard(elements.textDecodeOutput.value);
+    elements.textDecodeCopyBtn.textContent = success ? '已复制' : '复制失败';
+    setTimeout(() => {
+      elements.textDecodeCopyBtn.textContent = '复制结果';
+    }, 900);
+  });
+}
+
+function updateTextDecodeOutput() {
+  elements.textDecodeOutput.value = decodeEscapedText(elements.textDecodeInput.value);
+}
+
+function closeTextDecodeModal() {
+  elements.textDecodeModal.style.display = 'none';
+}
+
+function decodeEscapedText(text) {
+  if (!text) return '';
+
+  const trimmed = text.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      // Fall back to tolerant decoding below.
+    }
+  }
+
+  return text
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex) => {
+      const codePoint = parseInt(hex, 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _;
+    })
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
+}
+
 function setupModalClickHandlers() {
   elements.presetModal.addEventListener('click', (e) => {
     if (e.target === elements.presetModal) {
@@ -267,6 +329,12 @@ function setupModalClickHandlers() {
   elements.savedConnectionsModal.addEventListener('click', (e) => {
     if (e.target === elements.savedConnectionsModal) {
       if (callbacks.closeSavedConnectionsModal) callbacks.closeSavedConnectionsModal();
+    }
+  });
+
+  elements.textDecodeModal.addEventListener('click', (e) => {
+    if (e.target === elements.textDecodeModal) {
+      closeTextDecodeModal();
     }
   });
 }

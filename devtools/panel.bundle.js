@@ -1710,6 +1710,7 @@
     setupDetailHandlers();
     setupResizerHandlers();
     setupSearchHandlers();
+    setupTextDecodeHandlers();
     setupModalClickHandlers();
   }
 
@@ -1929,6 +1930,67 @@
     });
   }
 
+  function setupTextDecodeHandlers() {
+    elements$2.btnTextDecode.addEventListener('click', () => {
+      elements$2.textDecodeModal.style.display = 'flex';
+      elements$2.textDecodeInput.focus();
+      updateTextDecodeOutput();
+    });
+
+    elements$2.textDecodeModalClose.addEventListener('click', closeTextDecodeModal);
+
+    elements$2.textDecodeInput.addEventListener('input', updateTextDecodeOutput);
+
+    elements$2.textDecodeClearBtn.addEventListener('click', () => {
+      elements$2.textDecodeInput.value = '';
+      elements$2.textDecodeOutput.value = '';
+      elements$2.textDecodeInput.focus();
+    });
+
+    elements$2.textDecodeCopyBtn.addEventListener('click', async () => {
+      const success = await copyToClipboard(elements$2.textDecodeOutput.value);
+      elements$2.textDecodeCopyBtn.textContent = success ? '已复制' : '复制失败';
+      setTimeout(() => {
+        elements$2.textDecodeCopyBtn.textContent = '复制结果';
+      }, 900);
+    });
+  }
+
+  function updateTextDecodeOutput() {
+    elements$2.textDecodeOutput.value = decodeEscapedText(elements$2.textDecodeInput.value);
+  }
+
+  function closeTextDecodeModal() {
+    elements$2.textDecodeModal.style.display = 'none';
+  }
+
+  function decodeEscapedText(text) {
+    if (!text) return '';
+
+    const trimmed = text.trim();
+    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        // Fall back to tolerant decoding below.
+      }
+    }
+
+    return text
+      .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex) => {
+        const codePoint = parseInt(hex, 16);
+        return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : _;
+      })
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, '\\');
+  }
+
   function setupModalClickHandlers() {
     elements$2.presetModal.addEventListener('click', (e) => {
       if (e.target === elements$2.presetModal) {
@@ -1945,6 +2007,12 @@
     elements$2.savedConnectionsModal.addEventListener('click', (e) => {
       if (e.target === elements$2.savedConnectionsModal) {
         if (callbacks$2.closeSavedConnectionsModal) callbacks$2.closeSavedConnectionsModal();
+      }
+    });
+
+    elements$2.textDecodeModal.addEventListener('click', (e) => {
+      if (e.target === elements$2.textDecodeModal) {
+        closeTextDecodeModal();
       }
     });
   }
@@ -2761,6 +2829,13 @@
     btnPin: document.getElementById('btn-pin'),
     btnStats: document.getElementById('btn-stats'),
     filterInput: document.getElementById('filter-input'),
+    btnTextDecode: document.getElementById('btn-text-decode'),
+    textDecodeModal: document.getElementById('text-decode-modal'),
+    textDecodeModalClose: document.getElementById('text-decode-modal-close'),
+    textDecodeInput: document.getElementById('text-decode-input'),
+    textDecodeOutput: document.getElementById('text-decode-output'),
+    textDecodeClearBtn: document.getElementById('text-decode-clear-btn'),
+    textDecodeCopyBtn: document.getElementById('text-decode-copy-btn'),
     requestTypeFilter: document.getElementById('request-type-filter'),
     displayFieldInput: document.getElementById('display-field-input'),
     messageFilterContainer: document.getElementById('message-filter-container'),

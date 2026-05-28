@@ -57,7 +57,9 @@ Monitor streaming responses from popular AI chat applications:
 ### Features
 
 - 🔍 **Real-time Monitoring**: Intercept and display all EventSource, Fetch-based SSE, and XMLHttpRequest connections
-- 📊 **Message Inspection**: View detailed message data with JSON syntax highlighting
+- 📊 **Message Inspection**: View detailed message data with collapsible JSON syntax highlighting
+   - Collapse/expand JSON objects and arrays
+   - Right-click JSON field names to copy dot-paths such as `choices.0.delta.content`
 - 🔗 **Connection Management**: Track multiple streaming connections simultaneously
 - 🎯 **URL Filtering**: Filter connections by URL to focus on specific endpoints
 - 🏷️ **Request Type Badge**: Visual indicators for connection types (EventSource, Fetch, XMLHttpRequest)
@@ -69,6 +71,7 @@ Monitor streaming responses from popular AI chat applications:
    - Keyboard navigation for field suggestions
    - Real-time filter statistics
 - 🔍 **Advanced Message Search**: Full-text search across all message content with keyword highlighting
+- 🧭 **Field Path Display**: Enter a JSON path in the message list data column to display only that field
 - 💾 **Data Export**: Export captured data in JSON or CSV format
    - Export current connection or all connections
    - UTF-8 BOM support for proper encoding in Excel
@@ -93,6 +96,7 @@ Monitor streaming responses from popular AI chat applications:
 - 📌 **Message Pinning**: Pin important messages to keep them at the top of the list
 - 📜 **Auto Scroll**: Auto-scroll to latest messages (toggleable)
 - 📐 **Resizable Columns**: Adjust table column widths for better readability
+- 🔤 **Text Escape Decoder**: Decode escaped Unicode/text such as `"\u63a8\u7406\u601d\u8003"` into readable text
 - 🌓 **Dark Mode**: Automatic dark mode support based on system preferences
 - 🚀 **Performance Optimization**: Efficient rendering and event delegation for large message lists
 
@@ -105,6 +109,7 @@ Monitor streaming responses from popular AI chat applications:
 | XMLHttpRequest Support | ✅ | ❌ | ✅ |
 | Message Filtering | ✅ Advanced | ❌ | ❌ |
 | Full-text Search | ✅ | ❌ | ❌ |
+| Field Path Display | ✅ | ❌ | ❌ |
 | Data Export | ✅ Rich JSON/CSV | ❌ | ⚠️ Manual |
 | Data Import | ✅ JSON | ❌ | ❌ |
 | Connection Persistence | ✅ IndexedDB | ❌ | ❌ |
@@ -113,6 +118,7 @@ Monitor streaming responses from popular AI chat applications:
 | Real-time Monitoring | ✅ | ✅ | ✅ |
 | Message Pinning | ✅ | ❌ | ❌ |
 | Filter Presets | ✅ | ❌ | ❌ |
+| Text Escape Decoder | ✅ | ❌ | ❌ |
 
 ### Installation
 
@@ -130,13 +136,16 @@ Monitor streaming responses from popular AI chat applications:
 4. Select a connection from the left panel to view its messages
 5. Click on any message to view its detailed JSON content
 6. Use the URL filter in the toolbar to filter connections
-7. Use message filters to filter messages by JSON field values
-8. Export data using the export button:
+7. Enter a JSON path in the data column header to show only that field in the message list
+8. Use message filters to filter messages by JSON field values
+9. Right-click a JSON field name in the detail view to copy its full field path
+10. Use the text decoder button on the right side of the toolbar to decode escaped Unicode/text
+11. Export data using the export button:
    - **Current Connection (JSON)**: Export selected connection with all its messages
    - **Current Connection (CSV)**: Export messages and connection metadata as CSV format
    - **All Connections (JSON)**: Export all connections and messages
    - **All Connections (CSV)**: Export all messages and connection metadata as CSV format
-9. Import data using the import button:
+12. Import data using the import button:
    - Supports JSON files exported by Stream Panel
    - Imported data is added as archived connections in the current panel
 
@@ -158,6 +167,20 @@ Web Page
           └── background.js (data storage)
               └── devtools/panel (UI display)
 ```
+
+### Message Inspection
+
+The detail view is designed for inspecting large JSON payloads:
+
+- **Collapsible JSON**: Expand or collapse objects and arrays directly in the detail view
+- **Field Path Copying**: Right-click any JSON field name and copy its full dot-path
+- **Path Format**: Object keys use dot notation, and arrays include indexes (for example, `choices.0.delta.content`)
+
+The message list also supports field-focused display:
+
+- Enter a JSON path in the **Data** column header to show only that field for each message
+- Leave the path input empty to restore the original full message data
+- This display setting does not change the raw message data, detail view, copy behavior, filtering, search, import, or export
 
 ### Message Filtering
 
@@ -201,6 +224,14 @@ The extension can import JSON files exported by Stream Panel:
   - Imported data is added as archived connections
   - Existing live captures are not overwritten
   - The first imported connection is automatically selected for inspection
+
+### Text Escape Decoder
+
+The toolbar includes a text escape decoder for quickly reading escaped payloads:
+
+- Supports Unicode escapes such as `\u63a8\u7406\u601d\u8003`
+- Supports `\u{...}`, `\xXX`, `\n`, `\r`, `\t`, escaped quotes, and backslashes
+- Supports copying the decoded result
 
 ### Development
 
@@ -289,6 +320,10 @@ For detailed documentation, see:
 - [x] Export data functionality (JSON/CSV)
 - [x] Import exported JSON sessions
 - [x] Message filtering with fuzzy autocomplete field selector
+- [x] Collapsible JSON detail view
+- [x] JSON field path copying
+- [x] Message list field path display
+- [x] Text escape decoder
 - [x] Column resizing for better readability
 - [x] Advanced message search
 - [x] Custom filter presets
@@ -378,7 +413,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### 功能特性
 
 - 🔍 **实时监控**：拦截并显示所有 EventSource、基于 Fetch 的 SSE 和 XMLHttpRequest 连接
-- 📊 **消息检查**：查看详细的消息数据，支持 JSON 语法高亮
+- 📊 **消息检查**：查看详细的消息数据，支持可折叠 JSON 语法高亮
+   - 展开/折叠 JSON 对象和数组
+   - 右键 JSON 字段名复制字段路径，例如 `choices.0.delta.content`
 - 🔗 **连接管理**：同时跟踪多个流式连接
 - 🎯 **URL 过滤**：按 URL 过滤连接，专注于特定端点
 - 🏷️ **请求类型标识**：可视化的连接类型标识（EventSource、Fetch、XMLHttpRequest）
@@ -390,6 +427,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
    - 字段候选支持键盘选择
    - 实时筛选统计
 - 🔍 **高级消息搜索**：在所有消息内容中进行全文搜索，支持关键词高亮
+- 🧭 **字段路径展示**：在消息列表数据列输入 JSON path，仅展示指定字段
 - 💾 **数据导出**：支持 JSON 或 CSV 格式导出捕获的数据
    - 导出当前连接或所有连接
    - UTF-8 BOM 支持，确保 Excel 正确编码
@@ -414,6 +452,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 📌 **消息置顶**：固定重要消息，使其保持在列表顶部
 - 📜 **自动滚动**：自动滚动到最新消息（可切换）
 - 📐 **可调整列宽**：调整表格列宽以提高可读性
+- 🔤 **文字转义工具**：将 `"\u63a8\u7406\u601d\u8003"` 等转义文本解码为可读文字
 - 🌓 **深色模式**：根据系统偏好自动支持深色模式
 - 🚀 **性能优化**：高效渲染，使用事件委托处理大量消息列表
 
@@ -426,6 +465,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 | XMLHttpRequest 支持 | ✅ | ❌ | ✅ |
 | 消息筛选 | ✅ 高级 | ❌ | ❌ |
 | 全文搜索 | ✅ | ❌ | ❌ |
+| 字段路径展示 | ✅ | ❌ | ❌ |
 | 数据导出 | ✅ 完整 JSON/CSV | ❌ | ⚠️ 手动 |
 | 数据导入 | ✅ JSON | ❌ | ❌ |
 | 连接持久化 | ✅ IndexedDB | ❌ | ❌ |
@@ -434,6 +474,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 | 实时监控 | ✅ | ✅ | ✅ |
 | 消息置顶 | ✅ | ❌ | ❌ |
 | 筛选预设 | ✅ | ❌ | ❌ |
+| 文字转义工具 | ✅ | ❌ | ❌ |
 
 ### 安装方法
 
@@ -451,13 +492,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 4. 从左侧面板选择一个连接以查看其消息
 5. 点击任何消息以查看其详细的 JSON 内容
 6. 使用工具栏中的 URL 过滤器来过滤连接
-7. 使用消息筛选器根据 JSON 字段值筛选消息
-8. 使用导出按钮导出数据：
+7. 在数据列表头输入 JSON path，仅展示指定字段
+8. 使用消息筛选器根据 JSON 字段值筛选消息
+9. 在消息详情中右键 JSON 字段名复制完整字段路径
+10. 使用工具栏最右侧的文字转义按钮解码 Unicode/转义文本
+11. 使用导出按钮导出数据：
    - **当前连接（JSON）**：导出选定连接及其所有消息
    - **当前连接（CSV）**：以 CSV 格式导出消息和连接元信息
    - **所有连接（JSON）**：导出所有连接和消息
    - **所有连接（CSV）**：以 CSV 格式导出所有消息和连接元信息
-9. 使用导入按钮导入数据：
+12. 使用导入按钮导入数据：
    - 支持导入 Stream Panel 导出的 JSON 文件
    - 导入的数据会作为归档连接添加到当前面板
 
@@ -479,6 +523,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
           └── background.js (数据存储)
               └── devtools/panel (UI 显示)
 ```
+
+### 消息检查
+
+详情视图适合检查大型 JSON 数据：
+
+- **可折叠 JSON**：在详情视图中直接展开或折叠对象和数组
+- **复制字段路径**：右键任意 JSON 字段名，复制完整点路径
+- **路径格式**：对象字段使用点号表示法，数组包含下标（例如：`choices.0.delta.content`）
+
+消息列表也支持按字段聚焦展示：
+
+- 在**数据**列标题输入 JSON path，可让每条消息只展示该字段
+- 清空 path 输入框即可恢复原始完整消息数据
+- 该展示设置不会修改原始消息、详情视图、复制、筛选、搜索、导入或导出行为
 
 ### 消息筛选
 
@@ -522,6 +580,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - 导入数据会作为归档连接添加到连接列表
   - 不会覆盖当前实时捕获的数据
   - 导入后自动选中第一条导入连接，方便继续检查
+
+### 文字转义工具
+
+工具栏提供文字转义工具，用于快速阅读被转义的响应内容：
+
+- 支持 `\u63a8\u7406\u601d\u8003` 等 Unicode 转义
+- 支持 `\u{...}`、`\xXX`、`\n`、`\r`、`\t`、转义引号和反斜杠
+- 支持复制解码结果
 
 ### 开发
 
@@ -610,6 +676,10 @@ pnpm watch
 - [x] 导出数据功能（JSON/CSV）
 - [x] 导入已导出的 JSON 会话
 - [x] 支持模糊搜索字段选择器的消息筛选
+- [x] 可折叠 JSON 详情视图
+- [x] JSON 字段路径复制
+- [x] 消息列表字段路径展示
+- [x] 文字转义工具
 - [x] 列宽调整以提高可读性
 - [x] 高级消息搜索
 - [x] 自定义筛选预设
