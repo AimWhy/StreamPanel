@@ -383,6 +383,7 @@
     showListView: null,
     renderFilterConditions: null
   };
+  let connectionListRenderToken = 0;
 
   function initConnectionManager(el) {
     elements$8 = el;
@@ -393,6 +394,7 @@
   }
 
   async function renderConnectionList() {
+    const renderToken = ++connectionListRenderToken;
     const connections = Object.values(state.connections);
     const urlFilter = state.filter.toLowerCase();
     const typeFilter = state.requestTypeFilter;
@@ -411,14 +413,21 @@
     filtered.sort((a, b) => b.createdAt - a.createdAt);
 
     if (filtered.length === 0) {
-      elements$8.connectionList.innerHTML = '<div class="empty-state">暂无连接</div>';
+      if (renderToken === connectionListRenderToken) {
+        elements$8.connectionList.innerHTML = '<div class="empty-state">暂无连接</div>';
+      }
       return;
     }
 
     const connectionHtml = await Promise.all(filtered.map(async (conn) => {
       const urlPath = getUrlPath(conn.url);
       const isSelected = conn.id === state.selectedConnectionId;
-      const isSaved = await isConnectionSaved(conn.originalId || conn.id);
+      let isSaved = false;
+      try {
+        isSaved = await isConnectionSaved(conn.originalId || conn.id);
+      } catch (error) {
+        console.warn('[Stream Panel] Failed to check saved connection:', error);
+      }
       const badgeClass = conn.isIframe ? 'badge-iframe' : 'badge-main';
       const badgeText = conn.isIframe ? 'iframe' : '主页面';
       const statusClass = `status-${conn.status}`;
@@ -448,6 +457,10 @@
     `;
     }));
 
+    if (renderToken !== connectionListRenderToken) {
+      return;
+    }
+
     elements$8.connectionList.innerHTML = connectionHtml.join('');
 
     elements$8.connectionList.querySelectorAll('.connection-item').forEach(item => {
@@ -460,9 +473,9 @@
   async function selectConnection(connectionId) {
     const isSelected = setSelectedConnection(connectionId);
 
-    await renderConnectionList();
-    if (callbacks$5.renderMessageList) callbacks$5.renderMessageList();
     if (callbacks$5.showListView) callbacks$5.showListView();
+    if (callbacks$5.renderMessageList) callbacks$5.renderMessageList({ force: true });
+    await renderConnectionList();
 
     if (isSelected && state.pendingFilters.length > 0) {
       elements$8.messageFilterContainer.style.display = 'block';
@@ -581,7 +594,9 @@
 
   let lastRenderedConnectionId = null;
   let lastRenderedMessageCount = 0;
+  let lastRenderSignature = '';
   let renderTimeout = null;
+  let renderToken = 0;
 
   function initMessageRenderer(el) {
     elements$6 = el;
@@ -593,7 +608,8 @@
     callbacks$4 = { ...callbacks$4, ...cb };
   }
 
-  function renderMessageList() {
+  function renderMessageList(options = {}) {
+    const currentToken = ++renderToken;
     const connection = state.connections[state.selectedConnectionId];
 
     if (!connection || connection.messages.length === 0) {
@@ -602,6 +618,7 @@
       elements$6.messageTbody.parentElement.style.display = 'none';
       lastRenderedConnectionId = null;
       lastRenderedMessageCount = 0;
+      lastRenderSignature = '';
       return;
     }
 
@@ -624,16 +641,25 @@
 
     const currentConnectionId = state.selectedConnectionId;
     const currentMessageCount = displayMessages.length;
+    const currentRenderSignature = getRenderSignature(currentConnectionId);
 
     const isConnectionChanged = currentConnectionId !== lastRenderedConnectionId;
-    const hasFilters = state.messageFilters.length > 0 || state.searchQuery.length > 0;
-    const shouldFullRender = isConnectionChanged || hasFilters;
+    const isRenderStateChanged = currentRenderSignature !== lastRenderSignature;
+    const isMessageCountReduced = currentMessageCount < lastRenderedMessageCount;
+    const shouldFullRender = options.force ||
+      isConnectionChanged ||
+      isRenderStateChanged ||
+      isMessageCountReduced;
 
     if (renderTimeout) {
       cancelAnimationFrame(renderTimeout);
     }
 
     renderTimeout = requestAnimationFrame(() => {
+      if (currentToken !== renderToken || currentConnectionId !== state.selectedConnectionId) {
+        return;
+      }
+
       if (shouldFullRender) {
         renderAllMessages(displayMessages);
       } else {
@@ -645,6 +671,16 @@
 
       lastRenderedConnectionId = currentConnectionId;
       lastRenderedMessageCount = currentMessageCount;
+      lastRenderSignature = currentRenderSignature;
+    });
+  }
+
+  function getRenderSignature(connectionId) {
+    const pinnedIds = Array.from(state.pinnedMessageIds[connectionId] || []).sort((a, b) => a - b);
+    return JSON.stringify({
+      filters: state.messageFilters,
+      search: state.searchQuery,
+      pinned: pinnedIds
     });
   }
 
@@ -700,11 +736,11 @@
 
     const typeCell = document.createElement('div');
     typeCell.className = 'message-cell col-type';
-    typeCell.innerHTML = hasSearch ? highlightSearchMatches(msg.eventType, state.searchQuery) : escapeHtml(msg.eventType);
+    typeCell.innerHTML = hasSearch ? highlightSearchMatches(msg.eventType || '', state.searchQuery) : escapeHtml(msg.eventType || '');
 
     const dataCell = document.createElement('div');
     dataCell.className = 'message-cell col-data';
-    dataCell.innerHTML = hasSearch ? highlightSearchMatches(msg.data, state.searchQuery) : escapeHtml(msg.data);
+    dataCell.innerHTML = hasSearch ? highlightSearchMatches(msg.data || '', state.searchQuery) : escapeHtml(msg.data || '');
 
     const timeCell = document.createElement('div');
     timeCell.className = 'message-cell col-time';
@@ -772,6 +808,7 @@
   }
 
   function highlightSearchMatches(text, query) {
+    text = String(text || '');
     if (!query) return escapeHtml(text);
 
     const escapedQuery = escapeRegex(query);
@@ -828,9 +865,11 @@
     }
 
     if (Array.isArray(obj)) {
-      if (obj.length > 0 && typeof obj[0] === 'object') {
-        extractFields(obj[0], prefix, fields);
-      }
+      obj.forEach(item => {
+        if (item && typeof item === 'object') {
+          extractFields(item, prefix, fields);
+        }
+      });
       return fields;
     }
 
@@ -842,8 +881,12 @@
 
           if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
             extractFields(obj[key], fieldPath, fields);
-          } else if (Array.isArray(obj[key]) && obj[key].length > 0 && typeof obj[key][0] === 'object') {
-            extractFields(obj[key][0], fieldPath, fields);
+          } else if (Array.isArray(obj[key])) {
+            obj[key].forEach(item => {
+              if (item && typeof item === 'object') {
+                extractFields(item, fieldPath, fields);
+              }
+            });
           }
         }
       }
@@ -860,6 +903,15 @@
       if (value === null || value === undefined) {
         return undefined;
       }
+
+      if (Array.isArray(value)) {
+        const values = value
+          .map(item => getNestedValue(item, key))
+          .filter(item => item !== undefined);
+        value = values.length > 0 ? values : undefined;
+        continue;
+      }
+
       value = value[key];
     }
 
@@ -882,16 +934,20 @@
             return false;
           }
 
-          const fieldValueStr = String(fieldValue);
+          const fieldValues = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
           const filterValueStr = String(filter.value);
 
-          if (filter.mode === 'equals') {
-            return fieldValueStr === filterValueStr;
-          } else if (filter.mode === 'contains') {
-            return fieldValueStr.includes(filterValueStr);
-          }
+          return fieldValues.some(value => {
+            const fieldValueStr = String(value);
 
-          return true;
+            if (filter.mode === 'equals') {
+              return fieldValueStr === filterValueStr;
+            } else if (filter.mode === 'contains') {
+              return fieldValueStr.includes(filterValueStr);
+            }
+
+            return true;
+          });
         });
       } catch (e) {
         return false;
@@ -907,7 +963,7 @@
     }
 
     state.pendingFilters.push({
-      field: availableFields[0] || '',
+      field: '',
       mode: 'equals',
       value: ''
     });
@@ -915,6 +971,13 @@
     elements$5.messageFilterContainer.style.display = 'block';
     elements$5.btnToggleFilter.classList.add('expanded');
     renderFilterConditions();
+
+    const lastInput = elements$5.filterConditions.querySelector(
+      `.filter-field-input[data-index="${state.pendingFilters.length - 1}"]`
+    );
+    if (lastInput) {
+      lastInput.focus();
+    }
   }
 
   function removeFilterCondition(index) {
@@ -977,30 +1040,44 @@
     elements$5.filterConditions.querySelectorAll('.filter-field-input').forEach(input => {
       const index = parseInt(input.dataset.index);
       const dropdown = input.parentElement.querySelector('.filter-field-dropdown');
+      let activeIndex = -1;
+      let currentMatches = [];
 
       const showDropdown = () => {
-        const searchValue = input.value.toLowerCase();
-        const filteredFields = availableFields.filter(field =>
-          field.toLowerCase().includes(searchValue)
-        );
+        currentMatches = getFuzzyMatchedFields(availableFields, input.value);
+        activeIndex = currentMatches.length > 0 ? 0 : -1;
 
-        if (filteredFields.length > 0) {
-          dropdown.innerHTML = filteredFields.map(field =>
-            `<div class="dropdown-item" data-value="${escapeHtml(field)}">${escapeHtml(field)}</div>`
+        if (currentMatches.length > 0) {
+          dropdown.innerHTML = currentMatches.map((field, itemIndex) =>
+            `<div class="dropdown-item ${itemIndex === activeIndex ? 'active' : ''}" data-value="${escapeHtml(field)}">${escapeHtml(field)}</div>`
           ).join('');
           dropdown.style.display = 'block';
-
-          dropdown.querySelectorAll('.dropdown-item').forEach(item => {
-            item.addEventListener('click', () => {
-              input.value = item.dataset.value;
-              dropdown.style.display = 'none';
-              const filter = state.pendingFilters[index];
-              updatePendingFilterCondition(index, item.dataset.value, filter.mode, filter.value);
-            });
-          });
+          setupDropdownItemListeners();
         } else {
-          dropdown.style.display = 'none';
+          dropdown.innerHTML = '<div class="dropdown-empty">无匹配字段</div>';
+          dropdown.style.display = 'block';
         }
+      };
+
+      const setupDropdownItemListeners = () => {
+        dropdown.querySelectorAll('.dropdown-item').forEach((item, itemIndex) => {
+          item.addEventListener('mouseenter', () => {
+            activeIndex = itemIndex;
+            updateActiveDropdownItem(dropdown, activeIndex);
+          });
+
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectField(item.dataset.value);
+          });
+        });
+      };
+
+      const selectField = (field) => {
+        input.value = field;
+        dropdown.style.display = 'none';
+        const filter = state.pendingFilters[index];
+        updatePendingFilterCondition(index, field, filter.mode, filter.value);
       };
 
       input.addEventListener('focus', showDropdown);
@@ -1008,6 +1085,29 @@
         const filter = state.pendingFilters[index];
         updatePendingFilterCondition(index, e.target.value, filter.mode, filter.value);
         showDropdown();
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (dropdown.style.display !== 'block') return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (currentMatches.length === 0) return;
+          activeIndex = (activeIndex + 1) % currentMatches.length;
+          updateActiveDropdownItem(dropdown, activeIndex);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (currentMatches.length === 0) return;
+          activeIndex = (activeIndex - 1 + currentMatches.length) % currentMatches.length;
+          updateActiveDropdownItem(dropdown, activeIndex);
+        } else if (e.key === 'Enter') {
+          if (activeIndex >= 0 && currentMatches[activeIndex]) {
+            e.preventDefault();
+            selectField(currentMatches[activeIndex]);
+          }
+        } else if (e.key === 'Escape') {
+          dropdown.style.display = 'none';
+        }
       });
 
       input.addEventListener('blur', () => {
@@ -1047,6 +1147,80 @@
     });
   }
 
+  function getFuzzyMatchedFields(fields, query) {
+    const normalizedQuery = normalizeFieldSearch(query);
+    if (!normalizedQuery) {
+      return fields;
+    }
+
+    return fields
+      .map(field => ({
+        field,
+        score: getFieldMatchScore(field, normalizedQuery)
+      }))
+      .filter(item => item.score !== Infinity)
+      .sort((a, b) => a.score - b.score || a.field.length - b.field.length || a.field.localeCompare(b.field))
+      .map(item => item.field);
+  }
+
+  function normalizeFieldSearch(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function getFieldMatchScore(field, query) {
+    const normalizedField = field.toLowerCase();
+    const compactField = normalizedField.replace(/[._\-\s]/g, '');
+    const compactQuery = query.replace(/[._\-\s]/g, '');
+    const queryParts = query.split(/[.\s]+/).filter(Boolean);
+
+    if (normalizedField === query) return 0;
+    if (normalizedField.startsWith(query)) return 1;
+    if (normalizedField.includes(query)) return 2 + normalizedField.indexOf(query) / 1000;
+    if (compactField.includes(compactQuery)) return 3 + compactField.indexOf(compactQuery) / 1000;
+
+    if (queryParts.length > 1 && queryParts.every(part => normalizedField.includes(part))) {
+      return 4;
+    }
+
+    const fuzzyScore = getSubsequenceScore(compactField, compactQuery);
+    if (fuzzyScore !== Infinity) {
+      return 5 + fuzzyScore / 1000;
+    }
+
+    return Infinity;
+  }
+
+  function getSubsequenceScore(text, query) {
+    if (!query) return 0;
+
+    let queryIndex = 0;
+    let firstMatch = -1;
+    let lastMatch = -1;
+
+    for (let textIndex = 0; textIndex < text.length && queryIndex < query.length; textIndex++) {
+      if (text[textIndex] === query[queryIndex]) {
+        if (firstMatch === -1) firstMatch = textIndex;
+        lastMatch = textIndex;
+        queryIndex++;
+      }
+    }
+
+    if (queryIndex !== query.length) {
+      return Infinity;
+    }
+
+    return (lastMatch - firstMatch) + firstMatch;
+  }
+
+  function updateActiveDropdownItem(dropdown, activeIndex) {
+    dropdown.querySelectorAll('.dropdown-item').forEach((item, itemIndex) => {
+      item.classList.toggle('active', itemIndex === activeIndex);
+      if (itemIndex === activeIndex) {
+        item.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
   function toggleFilterContainer() {
     const isHidden = elements$5.messageFilterContainer.style.display === 'none';
     elements$5.messageFilterContainer.style.display = isHidden ? 'block' : 'none';
@@ -1078,12 +1252,24 @@
   }
 
   function loadPresets() {
-    const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
+      const presets = stored ? JSON.parse(stored) : [];
+      return Array.isArray(presets) ? presets : [];
+    } catch (error) {
+      console.warn('[Stream Panel] Failed to load filter presets:', error);
+      return [];
+    }
   }
 
   function savePresetsToStorage(presets) {
     localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  }
+
+  function formatFilterSummary(filters) {
+    return filters
+      .map(f => `${escapeHtml(f.field)} ${f.mode === 'equals' ? '=' : '包含'} "${escapeHtml(f.value)}"`)
+      .join(' AND ');
   }
 
   function showSavePresetModal() {
@@ -1106,7 +1292,7 @@
       <div class="form-group">
         <label class="form-label">筛选条件预览</label>
         <div style="font-size: 11px; color: var(--text-secondary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-          ${state.pendingFilters.map(f => `${f.field} ${f.mode === 'equals' ? '=' : '包含'} "${f.value}"`).join(' AND ')}
+          ${formatFilterSummary(state.pendingFilters)}
         </div>
       </div>
     </div>
@@ -1169,7 +1355,7 @@
               ${preset.description ? escapeHtml(preset.description) : ''}
               <br>
               <span style="font-size: 10px; color: var(--text-muted);">
-                ${preset.filters.map(f => `${f.field} ${f.mode === 'equals' ? '=' : '包含'} "${f.value}"`).join(', ')}
+                ${formatFilterSummary(preset.filters)}
               </span>
             </div>
           </div>
@@ -1474,7 +1660,7 @@
         callbacks$1.updatePinButtonState();
       }
       if (callbacks$1.renderMessageList) {
-        callbacks$1.renderMessageList();
+        callbacks$1.renderMessageList({ force: true });
       }
     });
   }
@@ -1898,15 +2084,15 @@
 
     const lowerQuery = query.toLowerCase();
     return messages.filter(msg => {
-      if (msg.eventType.toLowerCase().includes(lowerQuery)) {
+      if (String(msg.eventType || '').toLowerCase().includes(lowerQuery)) {
         return true;
       }
 
-      if (msg.data.toLowerCase().includes(lowerQuery)) {
+      if (String(msg.data || '').toLowerCase().includes(lowerQuery)) {
         return true;
       }
 
-      if (msg.lastEventId && msg.lastEventId.toLowerCase().includes(lowerQuery)) {
+      if (String(msg.lastEventId || '').toLowerCase().includes(lowerQuery)) {
         return true;
       }
 
@@ -1917,13 +2103,24 @@
   // Export management module
 
 
+  function getVisibleMessages(messages) {
+    return searchMessages(filterMessages(messages), state.searchQuery);
+  }
+
+  function getAppliedFiltersMetadata() {
+    return {
+      messageFilters: state.messageFilters.length > 0 ? state.messageFilters : null,
+      searchQuery: state.searchQuery || null
+    };
+  }
+
   function getCurrentConnectionExportData() {
     const connection = state.connections[state.selectedConnectionId];
     if (!connection) {
       return null;
     }
 
-    const messages = filterMessages(connection.messages);
+    const messages = getVisibleMessages(connection.messages);
 
     return {
       connection: {
@@ -1943,7 +2140,7 @@
       })),
       exportedAt: new Date().toISOString(),
       totalMessages: messages.length,
-      appliedFilters: state.messageFilters.length > 0 ? state.messageFilters : null
+      appliedFilters: getAppliedFiltersMetadata()
     };
   }
 
@@ -1954,25 +2151,31 @@
     }
 
     return {
-      connections: connections.map(conn => ({
-        id: conn.id,
-        url: conn.url,
-        frameUrl: conn.frameUrl,
-        isIframe: conn.isIframe,
-        status: conn.status,
-        createdAt: formatTimestampForExport(conn.createdAt),
-        messages: conn.messages.map(msg => ({
-          id: msg.id,
-          eventType: msg.eventType,
-          data: msg.data,
-          lastEventId: msg.lastEventId,
-          timestamp: formatTimestampForExport(msg.timestamp)
-        })),
-        messageCount: conn.messages.length
-      })),
+      connections: connections.map(conn => {
+        const messages = getVisibleMessages(conn.messages);
+        return {
+          id: conn.id,
+          url: conn.url,
+          frameUrl: conn.frameUrl,
+          isIframe: conn.isIframe,
+          status: conn.status,
+          createdAt: formatTimestampForExport(conn.createdAt),
+          messages: messages.map(msg => ({
+            id: msg.id,
+            eventType: msg.eventType,
+            data: msg.data,
+            lastEventId: msg.lastEventId,
+            timestamp: formatTimestampForExport(msg.timestamp)
+          })),
+          messageCount: messages.length,
+          totalMessageCount: conn.messages.length
+        };
+      }),
       exportedAt: new Date().toISOString(),
       totalConnections: connections.length,
-      totalMessages: connections.reduce((sum, conn) => sum + conn.messages.length, 0)
+      totalMessages: connections.reduce((sum, conn) => sum + getVisibleMessages(conn.messages).length, 0),
+      totalRawMessages: connections.reduce((sum, conn) => sum + conn.messages.length, 0),
+      appliedFilters: getAppliedFiltersMetadata()
     };
   }
 
@@ -2024,7 +2227,7 @@
       return;
     }
 
-    const messages = filterMessages(connection.messages);
+    const messages = getVisibleMessages(connection.messages);
     if (messages.length === 0) {
       alert('当前连接没有消息可导出');
       return;
@@ -2049,7 +2252,7 @@
 
     const allMessages = [];
     connections.forEach(conn => {
-      conn.messages.forEach(msg => {
+      getVisibleMessages(conn.messages).forEach(msg => {
         allMessages.push({
           ...msg,
           timestamp: formatTimestampForExport(msg.timestamp),

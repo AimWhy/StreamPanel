@@ -3,6 +3,18 @@
 import { state } from './state.js';
 import { formatTimestampForExport, downloadFile } from './utils.js';
 import { filterMessages } from './filterManager.js';
+import { searchMessages } from './searchManager.js';
+
+function getVisibleMessages(messages) {
+  return searchMessages(filterMessages(messages), state.searchQuery);
+}
+
+function getAppliedFiltersMetadata() {
+  return {
+    messageFilters: state.messageFilters.length > 0 ? state.messageFilters : null,
+    searchQuery: state.searchQuery || null
+  };
+}
 
 export function getCurrentConnectionExportData() {
   const connection = state.connections[state.selectedConnectionId];
@@ -10,7 +22,7 @@ export function getCurrentConnectionExportData() {
     return null;
   }
 
-  const messages = filterMessages(connection.messages);
+  const messages = getVisibleMessages(connection.messages);
 
   return {
     connection: {
@@ -30,7 +42,7 @@ export function getCurrentConnectionExportData() {
     })),
     exportedAt: new Date().toISOString(),
     totalMessages: messages.length,
-    appliedFilters: state.messageFilters.length > 0 ? state.messageFilters : null
+    appliedFilters: getAppliedFiltersMetadata()
   };
 }
 
@@ -41,25 +53,31 @@ export function getAllConnectionsExportData() {
   }
 
   return {
-    connections: connections.map(conn => ({
-      id: conn.id,
-      url: conn.url,
-      frameUrl: conn.frameUrl,
-      isIframe: conn.isIframe,
-      status: conn.status,
-      createdAt: formatTimestampForExport(conn.createdAt),
-      messages: conn.messages.map(msg => ({
-        id: msg.id,
-        eventType: msg.eventType,
-        data: msg.data,
-        lastEventId: msg.lastEventId,
-        timestamp: formatTimestampForExport(msg.timestamp)
-      })),
-      messageCount: conn.messages.length
-    })),
+    connections: connections.map(conn => {
+      const messages = getVisibleMessages(conn.messages);
+      return {
+        id: conn.id,
+        url: conn.url,
+        frameUrl: conn.frameUrl,
+        isIframe: conn.isIframe,
+        status: conn.status,
+        createdAt: formatTimestampForExport(conn.createdAt),
+        messages: messages.map(msg => ({
+          id: msg.id,
+          eventType: msg.eventType,
+          data: msg.data,
+          lastEventId: msg.lastEventId,
+          timestamp: formatTimestampForExport(msg.timestamp)
+        })),
+        messageCount: messages.length,
+        totalMessageCount: conn.messages.length
+      };
+    }),
     exportedAt: new Date().toISOString(),
     totalConnections: connections.length,
-    totalMessages: connections.reduce((sum, conn) => sum + conn.messages.length, 0)
+    totalMessages: connections.reduce((sum, conn) => sum + getVisibleMessages(conn.messages).length, 0),
+    totalRawMessages: connections.reduce((sum, conn) => sum + conn.messages.length, 0),
+    appliedFilters: getAppliedFiltersMetadata()
   };
 }
 
@@ -111,7 +129,7 @@ export function exportCurrentToCSV() {
     return;
   }
 
-  const messages = filterMessages(connection.messages);
+  const messages = getVisibleMessages(connection.messages);
   if (messages.length === 0) {
     alert('当前连接没有消息可导出');
     return;
@@ -136,7 +154,7 @@ export function exportAllToCSV() {
 
   const allMessages = [];
   connections.forEach(conn => {
-    conn.messages.forEach(msg => {
+    getVisibleMessages(conn.messages).forEach(msg => {
       allMessages.push({
         ...msg,
         timestamp: formatTimestampForExport(msg.timestamp),

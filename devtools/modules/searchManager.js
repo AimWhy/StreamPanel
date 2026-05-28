@@ -7,15 +7,15 @@ export function searchMessages(messages, query) {
 
   const lowerQuery = query.toLowerCase();
   return messages.filter(msg => {
-    if (msg.eventType.toLowerCase().includes(lowerQuery)) {
+    if (String(msg.eventType || '').toLowerCase().includes(lowerQuery)) {
       return true;
     }
 
-    if (msg.data.toLowerCase().includes(lowerQuery)) {
+    if (String(msg.data || '').toLowerCase().includes(lowerQuery)) {
       return true;
     }
 
-    if (msg.lastEventId && msg.lastEventId.toLowerCase().includes(lowerQuery)) {
+    if (String(msg.lastEventId || '').toLowerCase().includes(lowerQuery)) {
       return true;
     }
 

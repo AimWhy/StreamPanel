@@ -10,6 +10,7 @@ let callbacks = {
   showListView: null,
   renderFilterConditions: null
 };
+let connectionListRenderToken = 0;
 
 export function initConnectionManager(el) {
   elements = el;
@@ -20,6 +21,7 @@ export function setCallbacks(cb) {
 }
 
 export async function renderConnectionList() {
+  const renderToken = ++connectionListRenderToken;
   const connections = Object.values(state.connections);
   const urlFilter = state.filter.toLowerCase();
   const typeFilter = state.requestTypeFilter;
@@ -38,14 +40,21 @@ export async function renderConnectionList() {
   filtered.sort((a, b) => b.createdAt - a.createdAt);
 
   if (filtered.length === 0) {
-    elements.connectionList.innerHTML = '<div class="empty-state">暂无连接</div>';
+    if (renderToken === connectionListRenderToken) {
+      elements.connectionList.innerHTML = '<div class="empty-state">暂无连接</div>';
+    }
     return;
   }
 
   const connectionHtml = await Promise.all(filtered.map(async (conn) => {
     const urlPath = getUrlPath(conn.url);
     const isSelected = conn.id === state.selectedConnectionId;
-    const isSaved = await isConnectionSaved(conn.originalId || conn.id);
+    let isSaved = false;
+    try {
+      isSaved = await isConnectionSaved(conn.originalId || conn.id);
+    } catch (error) {
+      console.warn('[Stream Panel] Failed to check saved connection:', error);
+    }
     const badgeClass = conn.isIframe ? 'badge-iframe' : 'badge-main';
     const badgeText = conn.isIframe ? 'iframe' : '主页面';
     const statusClass = `status-${conn.status}`;
@@ -75,6 +84,10 @@ export async function renderConnectionList() {
     `;
   }));
 
+  if (renderToken !== connectionListRenderToken) {
+    return;
+  }
+
   elements.connectionList.innerHTML = connectionHtml.join('');
 
   elements.connectionList.querySelectorAll('.connection-item').forEach(item => {
@@ -87,9 +100,9 @@ export async function renderConnectionList() {
 export async function selectConnection(connectionId) {
   const isSelected = setSelectedConnection(connectionId);
 
-  await renderConnectionList();
-  if (callbacks.renderMessageList) callbacks.renderMessageList();
   if (callbacks.showListView) callbacks.showListView();
+  if (callbacks.renderMessageList) callbacks.renderMessageList({ force: true });
+  await renderConnectionList();
 
   if (isSelected && state.pendingFilters.length > 0) {
     elements.messageFilterContainer.style.display = 'block';

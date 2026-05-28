@@ -20,12 +20,24 @@ export function setCallbacks(cb) {
 }
 
 export function loadPresets() {
-  const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem(PRESETS_STORAGE_KEY);
+    const presets = stored ? JSON.parse(stored) : [];
+    return Array.isArray(presets) ? presets : [];
+  } catch (error) {
+    console.warn('[Stream Panel] Failed to load filter presets:', error);
+    return [];
+  }
 }
 
 export function savePresetsToStorage(presets) {
   localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function formatFilterSummary(filters) {
+  return filters
+    .map(f => `${escapeHtml(f.field)} ${f.mode === 'equals' ? '=' : '包含'} "${escapeHtml(f.value)}"`)
+    .join(' AND ');
 }
 
 export function showSavePresetModal() {
@@ -48,7 +60,7 @@ export function showSavePresetModal() {
       <div class="form-group">
         <label class="form-label">筛选条件预览</label>
         <div style="font-size: 11px; color: var(--text-secondary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-          ${state.pendingFilters.map(f => `${f.field} ${f.mode === 'equals' ? '=' : '包含'} "${f.value}"`).join(' AND ')}
+          ${formatFilterSummary(state.pendingFilters)}
         </div>
       </div>
     </div>
@@ -111,7 +123,7 @@ export function showLoadPresetModal() {
               ${preset.description ? escapeHtml(preset.description) : ''}
               <br>
               <span style="font-size: 10px; color: var(--text-muted);">
-                ${preset.filters.map(f => `${f.field} ${f.mode === 'equals' ? '=' : '包含'} "${f.value}"`).join(', ')}
+                ${formatFilterSummary(preset.filters)}
               </span>
             </div>
           </div>

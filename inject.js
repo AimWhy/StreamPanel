@@ -28,27 +28,108 @@
     }, '*');
   }
 
-  // Parse SSE data from chunk
+  // Parse complete SSE event blocks. The caller is responsible for buffering
+  // incomplete trailing data between chunks.
   function parseSSEEvents(text) {
     const events = [];
-    const lines = text.split('\n');
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     let currentEvent = { data: '', event: 'message', id: '' };
 
     for (const line of lines) {
-      if (line.startsWith('data:')) {
-        const data = line.slice(5).trim();
-        currentEvent.data += (currentEvent.data ? '\n' : '') + data;
-      } else if (line.startsWith('event:')) {
-        currentEvent.event = line.slice(6).trim();
-      } else if (line.startsWith('id:')) {
-        currentEvent.id = line.slice(3).trim();
-      } else if (line === '' && currentEvent.data) {
-        events.push({ ...currentEvent });
+      if (line === '') {
+        if (currentEvent.data !== '') {
+          events.push({
+            ...currentEvent,
+            data: currentEvent.data.endsWith('\n')
+              ? currentEvent.data.slice(0, -1)
+              : currentEvent.data
+          });
+        }
         currentEvent = { data: '', event: 'message', id: '' };
+        continue;
+      }
+
+      if (line.startsWith(':')) {
+        continue;
+      }
+
+      const colonIndex = line.indexOf(':');
+      const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
+      let value = colonIndex === -1 ? '' : line.slice(colonIndex + 1);
+      if (value.startsWith(' ')) {
+        value = value.slice(1);
+      }
+
+      if (field === 'data') {
+        currentEvent.data += value + '\n';
+      } else if (field === 'event') {
+        currentEvent.event = value || 'message';
+      } else if (field === 'id') {
+        currentEvent.id = value;
       }
     }
 
     return events;
+  }
+
+  function findCompleteSSEBoundary(buffer) {
+    const normalized = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const boundaryIndex = normalized.lastIndexOf('\n\n');
+    if (boundaryIndex === -1) {
+      return null;
+    }
+
+    const completeNormalizedLength = boundaryIndex + 2;
+    let normalizedCount = 0;
+    let originalIndex = 0;
+
+    while (originalIndex < buffer.length && normalizedCount < completeNormalizedLength) {
+      if (buffer[originalIndex] === '\r') {
+        if (buffer[originalIndex + 1] === '\n') {
+          originalIndex += 2;
+        } else {
+          originalIndex += 1;
+        }
+        normalizedCount += 1;
+      } else {
+        originalIndex += 1;
+        normalizedCount += 1;
+      }
+    }
+
+    return originalIndex;
+  }
+
+  function isMessageLikeEvent(event) {
+    return event && Object.prototype.hasOwnProperty.call(event, 'data');
+  }
+
+  function resolveUrl(input, fallbackUrl = window.location.href) {
+    if (!input) {
+      return fallbackUrl;
+    }
+
+    try {
+      if (typeof input === 'string') {
+        return new URL(input, window.location.href).href;
+      }
+
+      if (input instanceof Request) {
+        return new URL(input.url, window.location.href).href;
+      }
+
+      if (input instanceof URL) {
+        return input.href;
+      }
+
+      if (typeof input.url === 'string') {
+        return new URL(input.url, window.location.href).href;
+      }
+
+      return new URL(String(input), window.location.href).href;
+    } catch (error) {
+      return fallbackUrl;
+    }
   }
 
   // ============================================
@@ -59,9 +140,39 @@
     const es = new OriginalEventSource(url, options);
     const connectionId = generateId();
     let messageIndex = 0;
+    const capturedEvents = new WeakSet();
+    const listenerMap = new Map();
 
     // Resolve full URL
-    const fullUrl = new URL(url, window.location.href).href;
+    const fullUrl = resolveUrl(url);
+
+    const captureEvent = function(event) {
+      if (!isMessageLikeEvent(event) || capturedEvents.has(event)) {
+        return;
+      }
+
+      capturedEvents.add(event);
+      messageIndex++;
+      postToContentScript({
+        type: 'stream-message',
+        connectionId: connectionId,
+        messageId: messageIndex,
+        eventType: event.type,
+        data: event.data,
+        lastEventId: event.lastEventId || '',
+        timestamp: Date.now()
+      });
+    };
+
+    const callListener = function(listener, context, event) {
+      if (typeof listener === 'function') {
+        return listener.call(context, event);
+      }
+      if (listener && typeof listener.handleEvent === 'function') {
+        return listener.handleEvent(event);
+      }
+      return undefined;
+    };
 
     // Notify new connection
     postToContentScript({
@@ -85,46 +196,50 @@
 
     // Intercept message event listeners
     const originalAddEventListener = es.addEventListener.bind(es);
+    const originalRemoveEventListener = es.removeEventListener.bind(es);
     es.addEventListener = function(type, listener, options) {
-      if (type === 'message' || type.startsWith('message')) {
+      if (listener && type !== 'open' && type !== 'error') {
         const wrappedListener = function(event) {
-          messageIndex++;
-          postToContentScript({
-            type: 'stream-message',
-            connectionId: connectionId,
-            messageId: messageIndex,
-            eventType: event.type,
-            data: event.data,
-            lastEventId: event.lastEventId || '',
-            timestamp: Date.now()
-          });
-          listener.call(this, event);
+          captureEvent(event);
+          return callListener(listener, this, event);
         };
+
+        let typeMap = listenerMap.get(type);
+        if (!typeMap) {
+          typeMap = new Map();
+          listenerMap.set(type, typeMap);
+        }
+        typeMap.set(listener, wrappedListener);
+
         return originalAddEventListener(type, wrappedListener, options);
       }
       return originalAddEventListener(type, listener, options);
     };
 
+    es.removeEventListener = function(type, listener, options) {
+      const wrappedListener = listenerMap.get(type)?.get(listener);
+      if (wrappedListener) {
+        listenerMap.get(type).delete(listener);
+        return originalRemoveEventListener(type, wrappedListener, options);
+      }
+      return originalRemoveEventListener(type, listener, options);
+    };
+
     // Intercept onmessage setter
     let _onmessage = null;
+    originalAddEventListener('message', function(event) {
+      captureEvent(event);
+      if (_onmessage) {
+        callListener(_onmessage, es, event);
+      }
+    });
+
     Object.defineProperty(es, 'onmessage', {
       get: function() {
         return _onmessage;
       },
       set: function(handler) {
         _onmessage = handler;
-        originalAddEventListener('message', function(event) {
-          messageIndex++;
-          postToContentScript({
-            type: 'stream-message',
-            connectionId: connectionId,
-            messageId: messageIndex,
-            eventType: event.type,
-            data: event.data,
-            lastEventId: event.lastEventId || '',
-            timestamp: Date.now()
-          });
-        });
       }
     });
 
@@ -166,16 +281,9 @@
   window.fetch = async function(...args) {
     const response = await OriginalFetch.apply(this, args);
 
-    // Get request URL
-    let requestUrl = '';
-    if (typeof args[0] === 'string') {
-      requestUrl = args[0];
-    } else if (args[0] instanceof Request) {
-      requestUrl = args[0].url;
-    } else if (args[0] && args[0].url) {
-      requestUrl = args[0].url;
-    }
-    const fullUrl = new URL(requestUrl, window.location.href).href;
+    // Get request URL. Some apps pass URL objects to fetch; falling back to
+    // the current page URL would make the connection list show the wrong link.
+    const fullUrl = resolveUrl(args[0], response.url || window.location.href);
 
     // Check if response is streaming
     const contentType = response.headers.get('content-type') || '';
@@ -244,7 +352,7 @@
               // Process any remaining buffer
               if (buffer.trim()) {
                 if (isSSE) {
-                  const events = parseSSEEvents(buffer);
+                  const events = parseSSEEvents(buffer + '\n\n');
                   for (const event of events) {
                     messageIndex++;
                     postToContentScript({
@@ -292,10 +400,10 @@
             // Parse based on stream type
             if (isSSE) {
               // Parse complete SSE events from buffer
-              const doubleNewlineIndex = buffer.lastIndexOf('\n\n');
-              if (doubleNewlineIndex !== -1) {
-                const completeData = buffer.substring(0, doubleNewlineIndex + 2);
-                buffer = buffer.substring(doubleNewlineIndex + 2);
+              const boundaryIndex = findCompleteSSEBoundary(buffer);
+              if (boundaryIndex !== null) {
+                const completeData = buffer.substring(0, boundaryIndex);
+                buffer = buffer.substring(boundaryIndex);
 
                 const events = parseSSEEvents(completeData);
                 log('Parsed SSE events:', events.length, 'from', completeData.length, 'bytes');
@@ -380,137 +488,156 @@
     let messageIndex = 0;
     let requestUrl = '';
     let isStreamingResponse = false;
-    let buffer = '';
+    let processedLength = 0;
+    let parseBuffer = '';
 
     // Intercept open method to capture URL
     const originalOpen = xhr.open;
     xhr.open = function(method, url, ...args) {
-      requestUrl = new URL(url, window.location.href).href;
+      requestUrl = resolveUrl(url);
       log('XHR open:', method, requestUrl);
       return originalOpen.call(this, method, url, ...args);
     };
 
-    // Intercept send method to monitor streaming responses
+    function emitXHRMessage(eventType, data, lastEventId = '') {
+      messageIndex++;
+      postToContentScript({
+        type: 'stream-message',
+        connectionId: connectionId,
+        messageId: messageIndex,
+        eventType: eventType,
+        data: data,
+        lastEventId: lastEventId,
+        timestamp: Date.now()
+      });
+    }
+
+    function processXHRChunk(contentType, chunk) {
+      if (!chunk) return;
+
+      parseBuffer += chunk;
+      log('XHR received chunk, length:', chunk.length);
+
+      if (contentType.includes('text/event-stream')) {
+        const boundaryIndex = findCompleteSSEBoundary(parseBuffer);
+        if (boundaryIndex === null) return;
+
+        const completeData = parseBuffer.substring(0, boundaryIndex);
+        parseBuffer = parseBuffer.substring(boundaryIndex);
+
+        const events = parseSSEEvents(completeData);
+        for (const event of events) {
+          emitXHRMessage(event.event, event.data, event.id);
+        }
+      } else if (contentType.includes('application/x-ndjson') || contentType.includes('application/jsonlines')) {
+        const lines = parseBuffer.split(/\r?\n/);
+        parseBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim()) {
+            emitXHRMessage('message', line);
+          }
+        }
+      }
+    }
+
+    function flushXHRBuffer(contentType) {
+      if (!parseBuffer.trim()) {
+        parseBuffer = '';
+        return;
+      }
+
+      if (contentType.includes('text/event-stream')) {
+        const events = parseSSEEvents(parseBuffer + '\n\n');
+        for (const event of events) {
+          emitXHRMessage(event.event, event.data, event.id);
+        }
+      } else if (contentType.includes('application/x-ndjson') || contentType.includes('application/jsonlines')) {
+        emitXHRMessage('message', parseBuffer);
+      }
+
+      parseBuffer = '';
+    }
+
+    xhr.addEventListener('readystatechange', function() {
+      log('XHR readyState:', xhr.readyState, 'status:', xhr.status);
+
+      // HEADERS_RECEIVED: Detect if response is streaming
+      if (xhr.readyState === 2) {
+        const contentType = xhr.getResponseHeader('content-type') || '';
+        log('XHR Content-Type:', contentType);
+
+        isStreamingResponse = contentType.includes('text/event-stream') ||
+                              contentType.includes('application/x-ndjson') ||
+                              contentType.includes('application/jsonlines');
+
+        if (isStreamingResponse) {
+          connectionId = generateId();
+          messageIndex = 0;
+          processedLength = 0;
+          parseBuffer = '';
+
+          const streamType = contentType.includes('text/event-stream') ? 'SSE' :
+                            contentType.includes('application/x-ndjson') ? 'NDJSON' : 'Stream';
+
+          log('Detected XHR streaming response!', streamType);
+
+          postToContentScript({
+            type: 'stream-connection',
+            connectionId: connectionId,
+            url: requestUrl,
+            timestamp: Date.now(),
+            readyState: 1,
+            source: `XMLHttpRequest (${streamType})`
+          });
+
+          postToContentScript({
+            type: 'stream-open',
+            connectionId: connectionId,
+            timestamp: Date.now(),
+            readyState: 1
+          });
+        }
+      }
+
+      if ((xhr.readyState === 3 || xhr.readyState === 4) && isStreamingResponse) {
+        const contentType = xhr.getResponseHeader('content-type') || '';
+        let currentText = '';
+        try {
+          currentText = xhr.responseText || '';
+        } catch (error) {
+          postToContentScript({
+            type: 'stream-error',
+            connectionId: connectionId,
+            timestamp: Date.now(),
+            error: error.message
+          });
+          return;
+        }
+        const newData = currentText.substring(processedLength);
+        processedLength = currentText.length;
+        processXHRChunk(contentType, newData);
+      }
+
+      // DONE: Stream completed
+      if (xhr.readyState === 4 && isStreamingResponse) {
+        const contentType = xhr.getResponseHeader('content-type') || '';
+        flushXHRBuffer(contentType);
+
+        log('XHR stream completed');
+        postToContentScript({
+          type: 'stream-close',
+          connectionId: connectionId,
+          timestamp: Date.now()
+        });
+      }
+    });
+
+    // Intercept send method only for logging; monitoring uses the internal
+    // readystatechange listener so page callbacks remain untouched.
     const originalSend = xhr.send;
     xhr.send = function(...args) {
       log('XHR send:', requestUrl);
-
-      // Monitor readyState changes for streaming detection
-      const originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = function() {
-        log('XHR readyState:', xhr.readyState, 'status:', xhr.status);
-
-        // HEADERS_RECEIVED: Detect if response is streaming
-        if (xhr.readyState === 2) {
-          const contentType = xhr.getResponseHeader('content-type') || '';
-          log('XHR Content-Type:', contentType);
-
-          isStreamingResponse = contentType.includes('text/event-stream') ||
-                                contentType.includes('application/x-ndjson') ||
-                                contentType.includes('application/jsonlines');
-
-          if (isStreamingResponse) {
-            connectionId = generateId();
-            messageIndex = 0;
-            buffer = '';
-
-            const streamType = contentType.includes('text/event-stream') ? 'SSE' :
-                              contentType.includes('application/x-ndjson') ? 'NDJSON' : 'Stream';
-
-            log('Detected XHR streaming response!', streamType);
-
-            postToContentScript({
-              type: 'stream-connection',
-              connectionId: connectionId,
-              url: requestUrl,
-              timestamp: Date.now(),
-              readyState: 1,
-              source: `XMLHttpRequest (${streamType})`
-            });
-
-            postToContentScript({
-              type: 'stream-open',
-              connectionId: connectionId,
-              timestamp: Date.now(),
-              readyState: 1
-            });
-          }
-        }
-
-        // LOADING: Process streaming data chunks
-        if (xhr.readyState === 3 && isStreamingResponse) {
-          const contentType = xhr.getResponseHeader('content-type') || '';
-          const currentText = xhr.responseText || '';
-
-          // Extract only new data since last check
-          const newData = currentText.substring(buffer.length);
-          buffer = currentText;
-
-          if (newData) {
-            log('XHR received chunk, length:', newData.length);
-
-            if (contentType.includes('text/event-stream')) {
-              // Parse Server-Sent Events (SSE)
-              const events = parseSSEEvents(newData);
-              for (const event of events) {
-                messageIndex++;
-                postToContentScript({
-                  type: 'stream-message',
-                  connectionId: connectionId,
-                  messageId: messageIndex,
-                  eventType: event.event,
-                  data: event.data,
-                  lastEventId: event.id,
-                  timestamp: Date.now()
-                });
-              }
-            } else if (contentType.includes('application/x-ndjson') || contentType.includes('application/jsonlines')) {
-              // Parse Newline-Delimited JSON (NDJSON)
-              const lines = newData.split('\n').filter(line => line.trim());
-              for (const line of lines) {
-                messageIndex++;
-                postToContentScript({
-                  type: 'stream-message',
-                  connectionId: connectionId,
-                  messageId: messageIndex,
-                  eventType: 'message',
-                  data: line,
-                  lastEventId: '',
-                  timestamp: Date.now()
-                });
-              }
-            } else {
-              // Generic streaming data
-              messageIndex++;
-              postToContentScript({
-                type: 'stream-message',
-                connectionId: connectionId,
-                messageId: messageIndex,
-                eventType: 'message',
-                data: newData,
-                lastEventId: '',
-                timestamp: Date.now()
-              });
-            }
-          }
-        }
-
-        // DONE: Stream completed
-        if (xhr.readyState === 4 && isStreamingResponse) {
-          log('XHR stream completed');
-          postToContentScript({
-            type: 'stream-close',
-            connectionId: connectionId,
-            timestamp: Date.now()
-          });
-        }
-
-        // Call original handler if exists
-        if (originalOnReadyStateChange) {
-          return originalOnReadyStateChange.apply(this, arguments);
-        }
-      };
-
       return originalSend.apply(this, args);
     };
 

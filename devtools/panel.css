@@ -812,8 +812,15 @@ html, body {
   border-bottom: none;
 }
 
-.dropdown-item:hover {
+.dropdown-item:hover,
+.dropdown-item.active {
   background-color: var(--bg-hover);
+}
+
+.dropdown-empty {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .filter-mode-select {

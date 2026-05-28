@@ -177,7 +177,7 @@ function setupDetailHandlers() {
       callbacks.updatePinButtonState();
     }
     if (callbacks.renderMessageList) {
-      callbacks.renderMessageList();
+      callbacks.renderMessageList({ force: true });
     }
   });
 }
@@ -255,4 +255,3 @@ function toggleFilterContainer() {
     elements.btnToggleFilter.classList.remove('expanded');
   }
 }
-

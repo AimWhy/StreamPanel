@@ -43,9 +43,11 @@ export function extractFields(obj, prefix = '', fields = new Set()) {
   }
 
   if (Array.isArray(obj)) {
-    if (obj.length > 0 && typeof obj[0] === 'object') {
-      extractFields(obj[0], prefix, fields);
-    }
+    obj.forEach(item => {
+      if (item && typeof item === 'object') {
+        extractFields(item, prefix, fields);
+      }
+    });
     return fields;
   }
 
@@ -57,8 +59,12 @@ export function extractFields(obj, prefix = '', fields = new Set()) {
 
         if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
           extractFields(obj[key], fieldPath, fields);
-        } else if (Array.isArray(obj[key]) && obj[key].length > 0 && typeof obj[key][0] === 'object') {
-          extractFields(obj[key][0], fieldPath, fields);
+        } else if (Array.isArray(obj[key])) {
+          obj[key].forEach(item => {
+            if (item && typeof item === 'object') {
+              extractFields(item, fieldPath, fields);
+            }
+          });
         }
       }
     }
@@ -75,6 +81,15 @@ export function getNestedValue(obj, path) {
     if (value === null || value === undefined) {
       return undefined;
     }
+
+    if (Array.isArray(value)) {
+      const values = value
+        .map(item => getNestedValue(item, key))
+        .filter(item => item !== undefined);
+      value = values.length > 0 ? values : undefined;
+      continue;
+    }
+
     value = value[key];
   }
 
@@ -97,16 +112,20 @@ export function filterMessages(messages) {
           return false;
         }
 
-        const fieldValueStr = String(fieldValue);
+        const fieldValues = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
         const filterValueStr = String(filter.value);
 
-        if (filter.mode === 'equals') {
-          return fieldValueStr === filterValueStr;
-        } else if (filter.mode === 'contains') {
-          return fieldValueStr.includes(filterValueStr);
-        }
+        return fieldValues.some(value => {
+          const fieldValueStr = String(value);
 
-        return true;
+          if (filter.mode === 'equals') {
+            return fieldValueStr === filterValueStr;
+          } else if (filter.mode === 'contains') {
+            return fieldValueStr.includes(filterValueStr);
+          }
+
+          return true;
+        });
       });
     } catch (e) {
       return false;
@@ -122,7 +141,7 @@ export function addFilterCondition() {
   }
 
   state.pendingFilters.push({
-    field: availableFields[0] || '',
+    field: '',
     mode: 'equals',
     value: ''
   });
@@ -130,6 +149,13 @@ export function addFilterCondition() {
   elements.messageFilterContainer.style.display = 'block';
   elements.btnToggleFilter.classList.add('expanded');
   renderFilterConditions();
+
+  const lastInput = elements.filterConditions.querySelector(
+    `.filter-field-input[data-index="${state.pendingFilters.length - 1}"]`
+  );
+  if (lastInput) {
+    lastInput.focus();
+  }
 }
 
 export function removeFilterCondition(index) {
@@ -192,30 +218,44 @@ function setupFilterEventListeners(availableFields) {
   elements.filterConditions.querySelectorAll('.filter-field-input').forEach(input => {
     const index = parseInt(input.dataset.index);
     const dropdown = input.parentElement.querySelector('.filter-field-dropdown');
+    let activeIndex = -1;
+    let currentMatches = [];
 
     const showDropdown = () => {
-      const searchValue = input.value.toLowerCase();
-      const filteredFields = availableFields.filter(field =>
-        field.toLowerCase().includes(searchValue)
-      );
+      currentMatches = getFuzzyMatchedFields(availableFields, input.value);
+      activeIndex = currentMatches.length > 0 ? 0 : -1;
 
-      if (filteredFields.length > 0) {
-        dropdown.innerHTML = filteredFields.map(field =>
-          `<div class="dropdown-item" data-value="${escapeHtml(field)}">${escapeHtml(field)}</div>`
+      if (currentMatches.length > 0) {
+        dropdown.innerHTML = currentMatches.map((field, itemIndex) =>
+          `<div class="dropdown-item ${itemIndex === activeIndex ? 'active' : ''}" data-value="${escapeHtml(field)}">${escapeHtml(field)}</div>`
         ).join('');
         dropdown.style.display = 'block';
-
-        dropdown.querySelectorAll('.dropdown-item').forEach(item => {
-          item.addEventListener('click', () => {
-            input.value = item.dataset.value;
-            dropdown.style.display = 'none';
-            const filter = state.pendingFilters[index];
-            updatePendingFilterCondition(index, item.dataset.value, filter.mode, filter.value);
-          });
-        });
+        setupDropdownItemListeners();
       } else {
-        dropdown.style.display = 'none';
+        dropdown.innerHTML = '<div class="dropdown-empty">无匹配字段</div>';
+        dropdown.style.display = 'block';
       }
+    };
+
+    const setupDropdownItemListeners = () => {
+      dropdown.querySelectorAll('.dropdown-item').forEach((item, itemIndex) => {
+        item.addEventListener('mouseenter', () => {
+          activeIndex = itemIndex;
+          updateActiveDropdownItem(dropdown, activeIndex);
+        });
+
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectField(item.dataset.value);
+        });
+      });
+    };
+
+    const selectField = (field) => {
+      input.value = field;
+      dropdown.style.display = 'none';
+      const filter = state.pendingFilters[index];
+      updatePendingFilterCondition(index, field, filter.mode, filter.value);
     };
 
     input.addEventListener('focus', showDropdown);
@@ -223,6 +263,29 @@ function setupFilterEventListeners(availableFields) {
       const filter = state.pendingFilters[index];
       updatePendingFilterCondition(index, e.target.value, filter.mode, filter.value);
       showDropdown();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (dropdown.style.display !== 'block') return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentMatches.length === 0) return;
+        activeIndex = (activeIndex + 1) % currentMatches.length;
+        updateActiveDropdownItem(dropdown, activeIndex);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentMatches.length === 0) return;
+        activeIndex = (activeIndex - 1 + currentMatches.length) % currentMatches.length;
+        updateActiveDropdownItem(dropdown, activeIndex);
+      } else if (e.key === 'Enter') {
+        if (activeIndex >= 0 && currentMatches[activeIndex]) {
+          e.preventDefault();
+          selectField(currentMatches[activeIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        dropdown.style.display = 'none';
+      }
     });
 
     input.addEventListener('blur', () => {
@@ -259,6 +322,80 @@ function setupFilterEventListeners(availableFields) {
       const index = parseInt(e.target.dataset.index);
       removeFilterCondition(index);
     });
+  });
+}
+
+function getFuzzyMatchedFields(fields, query) {
+  const normalizedQuery = normalizeFieldSearch(query);
+  if (!normalizedQuery) {
+    return fields;
+  }
+
+  return fields
+    .map(field => ({
+      field,
+      score: getFieldMatchScore(field, normalizedQuery)
+    }))
+    .filter(item => item.score !== Infinity)
+    .sort((a, b) => a.score - b.score || a.field.length - b.field.length || a.field.localeCompare(b.field))
+    .map(item => item.field);
+}
+
+function normalizeFieldSearch(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getFieldMatchScore(field, query) {
+  const normalizedField = field.toLowerCase();
+  const compactField = normalizedField.replace(/[._\-\s]/g, '');
+  const compactQuery = query.replace(/[._\-\s]/g, '');
+  const queryParts = query.split(/[.\s]+/).filter(Boolean);
+
+  if (normalizedField === query) return 0;
+  if (normalizedField.startsWith(query)) return 1;
+  if (normalizedField.includes(query)) return 2 + normalizedField.indexOf(query) / 1000;
+  if (compactField.includes(compactQuery)) return 3 + compactField.indexOf(compactQuery) / 1000;
+
+  if (queryParts.length > 1 && queryParts.every(part => normalizedField.includes(part))) {
+    return 4;
+  }
+
+  const fuzzyScore = getSubsequenceScore(compactField, compactQuery);
+  if (fuzzyScore !== Infinity) {
+    return 5 + fuzzyScore / 1000;
+  }
+
+  return Infinity;
+}
+
+function getSubsequenceScore(text, query) {
+  if (!query) return 0;
+
+  let queryIndex = 0;
+  let firstMatch = -1;
+  let lastMatch = -1;
+
+  for (let textIndex = 0; textIndex < text.length && queryIndex < query.length; textIndex++) {
+    if (text[textIndex] === query[queryIndex]) {
+      if (firstMatch === -1) firstMatch = textIndex;
+      lastMatch = textIndex;
+      queryIndex++;
+    }
+  }
+
+  if (queryIndex !== query.length) {
+    return Infinity;
+  }
+
+  return (lastMatch - firstMatch) + firstMatch;
+}
+
+function updateActiveDropdownItem(dropdown, activeIndex) {
+  dropdown.querySelectorAll('.dropdown-item').forEach((item, itemIndex) => {
+    item.classList.toggle('active', itemIndex === activeIndex);
+    if (itemIndex === activeIndex) {
+      item.scrollIntoView({ block: 'nearest' });
+    }
   });
 }
 

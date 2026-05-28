@@ -12,7 +12,9 @@ let callbacks = {
 
 let lastRenderedConnectionId = null;
 let lastRenderedMessageCount = 0;
+let lastRenderSignature = '';
 let renderTimeout = null;
+let renderToken = 0;
 
 export function initMessageRenderer(el) {
   elements = el;
@@ -24,7 +26,8 @@ export function setCallbacks(cb) {
   callbacks = { ...callbacks, ...cb };
 }
 
-export function renderMessageList() {
+export function renderMessageList(options = {}) {
+  const currentToken = ++renderToken;
   const connection = state.connections[state.selectedConnectionId];
 
   if (!connection || connection.messages.length === 0) {
@@ -33,6 +36,7 @@ export function renderMessageList() {
     elements.messageTbody.parentElement.style.display = 'none';
     lastRenderedConnectionId = null;
     lastRenderedMessageCount = 0;
+    lastRenderSignature = '';
     return;
   }
 
@@ -55,16 +59,25 @@ export function renderMessageList() {
 
   const currentConnectionId = state.selectedConnectionId;
   const currentMessageCount = displayMessages.length;
+  const currentRenderSignature = getRenderSignature(currentConnectionId);
 
   const isConnectionChanged = currentConnectionId !== lastRenderedConnectionId;
-  const hasFilters = state.messageFilters.length > 0 || state.searchQuery.length > 0;
-  const shouldFullRender = isConnectionChanged || hasFilters;
+  const isRenderStateChanged = currentRenderSignature !== lastRenderSignature;
+  const isMessageCountReduced = currentMessageCount < lastRenderedMessageCount;
+  const shouldFullRender = options.force ||
+    isConnectionChanged ||
+    isRenderStateChanged ||
+    isMessageCountReduced;
 
   if (renderTimeout) {
     cancelAnimationFrame(renderTimeout);
   }
 
   renderTimeout = requestAnimationFrame(() => {
+    if (currentToken !== renderToken || currentConnectionId !== state.selectedConnectionId) {
+      return;
+    }
+
     if (shouldFullRender) {
       renderAllMessages(displayMessages);
     } else {
@@ -76,6 +89,16 @@ export function renderMessageList() {
 
     lastRenderedConnectionId = currentConnectionId;
     lastRenderedMessageCount = currentMessageCount;
+    lastRenderSignature = currentRenderSignature;
+  });
+}
+
+function getRenderSignature(connectionId) {
+  const pinnedIds = Array.from(state.pinnedMessageIds[connectionId] || []).sort((a, b) => a - b);
+  return JSON.stringify({
+    filters: state.messageFilters,
+    search: state.searchQuery,
+    pinned: pinnedIds
   });
 }
 
@@ -131,11 +154,11 @@ function createMessageRow(msg) {
 
   const typeCell = document.createElement('div');
   typeCell.className = 'message-cell col-type';
-  typeCell.innerHTML = hasSearch ? highlightSearchMatches(msg.eventType, state.searchQuery) : escapeHtml(msg.eventType);
+  typeCell.innerHTML = hasSearch ? highlightSearchMatches(msg.eventType || '', state.searchQuery) : escapeHtml(msg.eventType || '');
 
   const dataCell = document.createElement('div');
   dataCell.className = 'message-cell col-data';
-  dataCell.innerHTML = hasSearch ? highlightSearchMatches(msg.data, state.searchQuery) : escapeHtml(msg.data);
+  dataCell.innerHTML = hasSearch ? highlightSearchMatches(msg.data || '', state.searchQuery) : escapeHtml(msg.data || '');
 
   const timeCell = document.createElement('div');
   timeCell.className = 'message-cell col-time';
@@ -203,6 +226,7 @@ export function updateFilterStats(filteredCount, totalCount) {
 }
 
 export function highlightSearchMatches(text, query) {
+  text = String(text || '');
   if (!query) return escapeHtml(text);
 
   const escapedQuery = escapeRegex(query);
