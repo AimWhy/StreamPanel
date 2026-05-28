@@ -328,155 +328,341 @@
       readyState: 1
     });
 
-    // Clone body to intercept
     if (!response.body) {
       log('ERROR: Response body is null! Cannot intercept stream.');
       return response;
     }
 
-    log('Response body exists, creating reader...');
+    try {
+      const streamObserver = attachFetchStreamObserver(response.body, {
+        connectionId,
+        isSSE,
+        isNDJSON,
+        getNextMessageId: () => ++messageIndex
+      });
+      wrapFetchResponseClone(response, streamObserver);
+    } catch (error) {
+      postToContentScript({
+        type: 'stream-error',
+        connectionId: connectionId,
+        timestamp: Date.now(),
+        error: error.message
+      });
+    }
 
-    const originalBody = response.body;
-    const reader = originalBody.getReader();
+    return response;
+  };
+
+  const streamObserverMap = new WeakMap();
+  const wrappedStreamReaders = new WeakSet();
+  const streamsCreatingAsyncIterator = new WeakSet();
+
+  function createFetchStreamObserver(options) {
+    const { connectionId, isSSE, isNDJSON, getNextMessageId } = options;
     const decoder = new TextDecoder();
     let buffer = '';
+    let closed = false;
+    let activeStream = null;
 
-    // Create a new ReadableStream that intercepts data
-    const interceptedStream = new ReadableStream({
-      async start(controller) {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
+    const emitMessage = (eventType, data, lastEventId = '') => {
+      postToContentScript({
+        type: 'stream-message',
+        connectionId: connectionId,
+        messageId: getNextMessageId(),
+        eventType: eventType,
+        data: data,
+        lastEventId: lastEventId,
+        timestamp: Date.now()
+      });
+    };
 
-            if (done) {
-              // Process any remaining buffer
-              if (buffer.trim()) {
-                if (isSSE) {
-                  const events = parseSSEEvents(buffer + '\n\n');
-                  for (const event of events) {
-                    messageIndex++;
-                    postToContentScript({
-                      type: 'stream-message',
-                      connectionId: connectionId,
-                      messageId: messageIndex,
-                      eventType: event.event,
-                      data: event.data,
-                      lastEventId: event.id,
-                      timestamp: Date.now()
-                    });
-                  }
-                } else if (isNDJSON) {
-                  // Parse newline-delimited JSON
-                  const lines = buffer.split('\n').filter(line => line.trim());
-                  for (const line of lines) {
-                    messageIndex++;
-                    postToContentScript({
-                      type: 'stream-message',
-                      connectionId: connectionId,
-                      messageId: messageIndex,
-                      eventType: 'message',
-                      data: line,
-                      lastEventId: '',
-                      timestamp: Date.now()
-                    });
-                  }
-                }
-              }
+    const reportError = (error) => {
+      postToContentScript({
+        type: 'stream-error',
+        connectionId: connectionId,
+        timestamp: Date.now(),
+        error: error?.message || String(error)
+      });
+    };
 
-              postToContentScript({
-                type: 'stream-close',
-                connectionId: connectionId,
-                timestamp: Date.now()
-              });
+    const flushBuffer = () => {
+      if (!buffer.trim()) {
+        buffer = '';
+        return;
+      }
 
-              controller.close();
-              break;
-            }
-
-            // Decode and buffer the chunk
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
-
-            // Parse based on stream type
-            if (isSSE) {
-              // Parse complete SSE events from buffer
-              const boundaryIndex = findCompleteSSEBoundary(buffer);
-              if (boundaryIndex !== null) {
-                const completeData = buffer.substring(0, boundaryIndex);
-                buffer = buffer.substring(boundaryIndex);
-
-                const events = parseSSEEvents(completeData);
-                log('Parsed SSE events:', events.length, 'from', completeData.length, 'bytes');
-                for (const event of events) {
-                  messageIndex++;
-                  const messagePayload = {
-                    type: 'stream-message',
-                    connectionId: connectionId,
-                    messageId: messageIndex,
-                    eventType: event.event,
-                    data: event.data,
-                    lastEventId: event.id,
-                    timestamp: Date.now()
-                  };
-                  log('Posting message #' + messageIndex + ':', event.event);
-                  postToContentScript(messagePayload);
-                }
-              }
-            } else if (isNDJSON) {
-              // Parse newline-delimited JSON
-              const lines = buffer.split('\n');
-              // Keep the last incomplete line in buffer
-              buffer = lines.pop() || '';
-
-              for (const line of lines) {
-                if (line.trim()) {
-                  messageIndex++;
-                  postToContentScript({
-                    type: 'stream-message',
-                    connectionId: connectionId,
-                    messageId: messageIndex,
-                    eventType: 'message',
-                    data: line,
-                    lastEventId: '',
-                    timestamp: Date.now()
-                  });
-                }
-              }
-            }
-
-            // Pass through the original data
-            controller.enqueue(value);
-          }
-        } catch (error) {
-          log('Stream error:', error);
-          postToContentScript({
-            type: 'stream-error',
-            connectionId: connectionId,
-            timestamp: Date.now(),
-            error: error.message
-          });
-          controller.error(error);
+      if (isSSE) {
+        const events = parseSSEEvents(buffer + '\n\n');
+        for (const event of events) {
+          emitMessage(event.event, event.data, event.id);
         }
-      },
+      } else if (isNDJSON) {
+        const lines = buffer.split(/\r?\n/).filter(line => line.trim());
+        for (const line of lines) {
+          emitMessage('message', line);
+        }
+      }
+      buffer = '';
+    };
 
-      cancel() {
-        log('Stream cancelled');
-        postToContentScript({
-          type: 'stream-close',
-          connectionId: connectionId,
-          timestamp: Date.now()
-        });
-        reader.cancel();
+    const shouldObserveStream = (stream) => {
+      if (!activeStream) {
+        activeStream = stream;
+        return true;
+      }
+      return activeStream === stream;
+    };
+
+    const closeConnection = (stream) => {
+      if (activeStream && activeStream !== stream) return;
+      if (closed) return;
+      closed = true;
+      flushBuffer();
+      postToContentScript({
+        type: 'stream-close',
+        connectionId: connectionId,
+        timestamp: Date.now()
+      });
+    };
+
+    const processChunk = (value, stream) => {
+      if (!value) return;
+      if (!shouldObserveStream(stream)) return;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      if (isSSE) {
+        const boundaryIndex = findCompleteSSEBoundary(buffer);
+        if (boundaryIndex !== null) {
+          const completeData = buffer.substring(0, boundaryIndex);
+          buffer = buffer.substring(boundaryIndex);
+          const events = parseSSEEvents(completeData);
+          for (const event of events) {
+            emitMessage(event.event, event.data, event.id);
+          }
+        }
+      } else if (isNDJSON) {
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.trim()) {
+            emitMessage('message', line);
+          }
+        }
+      }
+    };
+
+    const createObserverTransform = (stream) => new TransformStream({
+      transform(chunk, controller) {
+        processChunk(chunk, stream);
+        controller.enqueue(chunk);
+      },
+      flush() {
+        closeConnection(stream);
       }
     });
 
-    // Create new response with intercepted body
-    return new Response(interceptedStream, {
-      headers: response.headers,
-      status: response.status,
-      statusText: response.statusText
+    return {
+      processChunk,
+      closeConnection,
+      createObserverTransform,
+      reportError
+    };
+  }
+
+  function registerFetchStreamObserver(stream, observer) {
+    if (!stream || !observer) return;
+    streamObserverMap.set(stream, observer);
+  }
+
+  function attachFetchStreamObserver(stream, options) {
+    installReadableStreamObserverHooks();
+    const observer = createFetchStreamObserver(options);
+    registerFetchStreamObserver(stream, observer);
+    return observer;
+  }
+
+  function wrapFetchResponseClone(response, observer) {
+    if (!response || typeof response.clone !== 'function' || !observer) return;
+
+    const originalClone = response.clone.bind(response);
+    try {
+      response.clone = function(...cloneArgs) {
+        const clonedResponse = originalClone(...cloneArgs);
+        registerFetchStreamObserver(clonedResponse.body, observer);
+        wrapFetchResponseClone(clonedResponse, observer);
+        return clonedResponse;
+      };
+    } catch (error) {
+      log('Unable to wrap Response.clone:', error);
+    }
+  }
+
+  function installReadableStreamObserverHooks() {
+    const proto = window.ReadableStream?.prototype;
+    if (!proto || proto.__STREAM_PANEL_OBSERVER_HOOKED__) return;
+
+    const originalGetReader = proto.getReader;
+    const originalPipeThrough = proto.pipeThrough;
+    const originalPipeTo = proto.pipeTo;
+    const originalTee = proto.tee;
+    const originalValues = proto.values;
+    const originalAsyncIterator = typeof Symbol !== 'undefined' && Symbol.asyncIterator
+      ? proto[Symbol.asyncIterator]
+      : null;
+
+    Object.defineProperty(proto, '__STREAM_PANEL_OBSERVER_HOOKED__', {
+      value: true,
+      configurable: false
     });
-  };
+
+    if (typeof originalGetReader === 'function') {
+      proto.getReader = function(...readerArgs) {
+        const reader = originalGetReader.apply(this, readerArgs);
+        const observer = streamObserverMap.get(this);
+        if (!observer || streamsCreatingAsyncIterator.has(this) || wrappedStreamReaders.has(reader)) {
+          return reader;
+        }
+
+        wrappedStreamReaders.add(reader);
+        const stream = this;
+        const originalRead = reader.read.bind(reader);
+        const originalCancel = reader.cancel?.bind(reader);
+
+        reader.read = async function(...readArgs) {
+          try {
+            const result = await originalRead(...readArgs);
+            if (result.done) {
+              observer.closeConnection(stream);
+            } else {
+              observer.processChunk(result.value, stream);
+            }
+            return result;
+          } catch (error) {
+            observer.reportError(error);
+            throw error;
+          }
+        };
+
+        if (originalCancel) {
+          reader.cancel = function(...cancelArgs) {
+            observer.closeConnection(stream);
+            return originalCancel(...cancelArgs);
+          };
+        }
+
+        return reader;
+      };
+    }
+
+    const wrapAsyncIterator = (stream, iterator, observer) => {
+      if (!observer || !iterator || typeof iterator.next !== 'function') {
+        return iterator;
+      }
+
+      return {
+        async next(...nextArgs) {
+          try {
+            const result = await iterator.next(...nextArgs);
+            if (result.done) {
+              observer.closeConnection(stream);
+            } else {
+              observer.processChunk(result.value, stream);
+            }
+            return result;
+          } catch (error) {
+            observer.reportError(error);
+            throw error;
+          }
+        },
+        async return(...returnArgs) {
+          observer.closeConnection(stream);
+          if (typeof iterator.return === 'function') {
+            return iterator.return(...returnArgs);
+          }
+          return { done: true };
+        },
+        async throw(...throwArgs) {
+          const error = throwArgs[0] || new Error('ReadableStream iterator error');
+          observer.reportError(error);
+          if (typeof iterator.throw === 'function') {
+            return iterator.throw(...throwArgs);
+          }
+          throw error;
+        },
+        [Symbol.asyncIterator]() {
+          return this;
+        }
+      };
+    };
+
+    const createObservedIterator = function(originalIteratorFactory, iteratorArgs) {
+      const observer = streamObserverMap.get(this);
+      if (!observer) {
+        return originalIteratorFactory.apply(this, iteratorArgs);
+      }
+
+      streamsCreatingAsyncIterator.add(this);
+      try {
+        const iterator = originalIteratorFactory.apply(this, iteratorArgs);
+        return wrapAsyncIterator(this, iterator, observer);
+      } finally {
+        streamsCreatingAsyncIterator.delete(this);
+      }
+    };
+
+    if (typeof originalValues === 'function') {
+      proto.values = function(...valuesArgs) {
+        return createObservedIterator.call(this, originalValues, valuesArgs);
+      };
+    }
+
+    if (
+      typeof originalAsyncIterator === 'function' &&
+      typeof Symbol !== 'undefined' &&
+      Symbol.asyncIterator
+    ) {
+      proto[Symbol.asyncIterator] = function(...iteratorArgs) {
+        return createObservedIterator.call(this, originalAsyncIterator, iteratorArgs);
+      };
+    }
+
+    if (typeof originalTee === 'function') {
+      proto.tee = function(...teeArgs) {
+        const branches = originalTee.apply(this, teeArgs);
+        const observer = streamObserverMap.get(this);
+        if (observer && Array.isArray(branches)) {
+          registerFetchStreamObserver(branches[0], observer);
+          registerFetchStreamObserver(branches[1], observer);
+        }
+        return branches;
+      };
+    }
+
+    if (typeof originalPipeThrough === 'function') {
+      proto.pipeThrough = function(transform, options) {
+        const observer = streamObserverMap.get(this);
+        if (!observer || typeof window.TransformStream !== 'function') {
+          return originalPipeThrough.call(this, transform, options);
+        }
+
+        const observedStream = originalPipeThrough.call(this, observer.createObserverTransform(this));
+        return originalPipeThrough.call(observedStream, transform, options);
+      };
+    }
+
+    if (typeof originalPipeTo === 'function' && typeof originalPipeThrough === 'function') {
+      proto.pipeTo = function(destination, options) {
+        const observer = streamObserverMap.get(this);
+        if (!observer || typeof window.TransformStream !== 'function') {
+          return originalPipeTo.call(this, destination, options);
+        }
+
+        const observedStream = originalPipeThrough.call(this, observer.createObserverTransform(this));
+        return originalPipeTo.call(observedStream, destination, options);
+      };
+    }
+  }
 
   // ============================================
   // Intercept XMLHttpRequest for SSE and Streaming
