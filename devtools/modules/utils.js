@@ -119,7 +119,8 @@ export function getStatusText(status) {
     'connecting': '连接中',
     'open': '已连接',
     'closed': '已关闭',
-    'error': '错误'
+    'error': '错误',
+    'archived': '归档'
   };
   return statusMap[status] || status;
 }

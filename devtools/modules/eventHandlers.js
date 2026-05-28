@@ -12,6 +12,7 @@ let callbacks = {
   showMessageDetail: null,
   toggleFilterContainer: null,
   handleExport: null,
+  handleImport: null,
   showSavePresetModal: null,
   showLoadPresetModal: null,
   closePresetModal: null,
@@ -39,6 +40,18 @@ export function setCallbacks(cb) {
 }
 
 function setupToolbarHandlers() {
+  elements.btnImport.addEventListener('click', () => {
+    elements.importFileInput.click();
+  });
+
+  elements.importFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (file && callbacks.handleImport) {
+      await callbacks.handleImport(file);
+    }
+    e.target.value = '';
+  });
+
   elements.btnClear.addEventListener('click', () => {
     clearAllData();
     if (callbacks.renderConnectionList) callbacks.renderConnectionList();

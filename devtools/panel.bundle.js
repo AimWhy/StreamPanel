@@ -182,7 +182,8 @@
       'connecting': '连接中',
       'open': '已连接',
       'closed': '已关闭',
-      'error': '错误'
+      'error': '错误',
+      'archived': '归档'
     };
     return statusMap[status] || status;
   }
@@ -378,7 +379,7 @@
 
 
   let elements$8 = {};
-  let callbacks$5 = {
+  let callbacks$6 = {
     renderMessageList: null,
     showListView: null,
     renderFilterConditions: null
@@ -389,8 +390,8 @@
     elements$8 = el;
   }
 
-  function setCallbacks$5(cb) {
-    callbacks$5 = { ...callbacks$5, ...cb };
+  function setCallbacks$6(cb) {
+    callbacks$6 = { ...callbacks$6, ...cb };
   }
 
   async function renderConnectionList() {
@@ -473,14 +474,14 @@
   async function selectConnection(connectionId) {
     const isSelected = setSelectedConnection(connectionId);
 
-    if (callbacks$5.showListView) callbacks$5.showListView();
-    if (callbacks$5.renderMessageList) callbacks$5.renderMessageList({ force: true });
+    if (callbacks$6.showListView) callbacks$6.showListView();
+    if (callbacks$6.renderMessageList) callbacks$6.renderMessageList({ force: true });
     await renderConnectionList();
 
     if (isSelected && state.pendingFilters.length > 0) {
       elements$8.messageFilterContainer.style.display = 'block';
       elements$8.btnToggleFilter.classList.add('expanded');
-      if (callbacks$5.renderFilterConditions) callbacks$5.renderFilterConditions();
+      if (callbacks$6.renderFilterConditions) callbacks$6.renderFilterConditions();
     }
   }
 
@@ -519,8 +520,8 @@
         });
         log('Added message #' + payload.messageId + ' to connection:', payload.connectionId);
         renderConnectionList();
-        if (state.selectedConnectionId === payload.connectionId && callbacks$5.renderMessageList) {
-          callbacks$5.renderMessageList();
+        if (state.selectedConnectionId === payload.connectionId && callbacks$6.renderMessageList) {
+          callbacks$6.renderMessageList();
         }
         break;
 
@@ -587,7 +588,7 @@
 
 
   let elements$6 = {};
-  let callbacks$4 = {
+  let callbacks$5 = {
     filterMessages: null,
     searchMessages: null
   };
@@ -604,8 +605,8 @@
     setupMessageListEventDelegation();
   }
 
-  function setCallbacks$4(cb) {
-    callbacks$4 = { ...callbacks$4, ...cb };
+  function setCallbacks$5(cb) {
+    callbacks$5 = { ...callbacks$5, ...cb };
   }
 
   function renderMessageList(options = {}) {
@@ -626,11 +627,11 @@
     elements$6.messageTbody.parentElement.style.display = 'flex';
 
     let filteredMessages = connection.messages;
-    if (callbacks$4.filterMessages) {
-      filteredMessages = callbacks$4.filterMessages(connection.messages);
+    if (callbacks$5.filterMessages) {
+      filteredMessages = callbacks$5.filterMessages(connection.messages);
     }
-    if (callbacks$4.searchMessages) {
-      filteredMessages = callbacks$4.searchMessages(filteredMessages, state.searchQuery);
+    if (callbacks$5.searchMessages) {
+      filteredMessages = callbacks$5.searchMessages(filteredMessages, state.searchQuery);
     }
 
     updateFilterStats(filteredMessages.length, connection.messages.length);
@@ -826,7 +827,7 @@
 
 
   let elements$5 = {};
-  let callbacks$3 = {
+  let callbacks$4 = {
     renderMessageList: null,
     updateFilterStats: null
   };
@@ -835,8 +836,8 @@
     elements$5 = el;
   }
 
-  function setCallbacks$3(cb) {
-    callbacks$3 = { ...callbacks$3, ...cb };
+  function setCallbacks$4(cb) {
+    callbacks$4 = { ...callbacks$4, ...cb };
   }
 
   function getAvailableFields() {
@@ -984,7 +985,7 @@
     state.pendingFilters.splice(index, 1);
     state.messageFilters = JSON.parse(JSON.stringify(state.pendingFilters));
     renderFilterConditions();
-    if (callbacks$3.renderMessageList) callbacks$3.renderMessageList();
+    if (callbacks$4.renderMessageList) callbacks$4.renderMessageList();
   }
 
   function clearAllFilters() {
@@ -993,12 +994,12 @@
     elements$5.messageFilterContainer.style.display = 'none';
     elements$5.btnToggleFilter.classList.remove('expanded');
     renderFilterConditions();
-    if (callbacks$3.renderMessageList) callbacks$3.renderMessageList();
+    if (callbacks$4.renderMessageList) callbacks$4.renderMessageList();
   }
 
   function applyFilters() {
     state.messageFilters = JSON.parse(JSON.stringify(state.pendingFilters));
-    if (callbacks$3.renderMessageList) callbacks$3.renderMessageList();
+    if (callbacks$4.renderMessageList) callbacks$4.renderMessageList();
   }
 
   function updatePendingFilterCondition(index, field, mode, value) {
@@ -1238,7 +1239,7 @@
   const PRESETS_STORAGE_KEY = 'stream-panel-filter-presets';
 
   let elements$4 = {};
-  let callbacks$2 = {
+  let callbacks$3 = {
     renderMessageList: null,
     renderFilterConditions: null
   };
@@ -1247,8 +1248,8 @@
     elements$4 = el;
   }
 
-  function setCallbacks$2(cb) {
-    callbacks$2 = { ...callbacks$2, ...cb };
+  function setCallbacks$3(cb) {
+    callbacks$3 = { ...callbacks$3, ...cb };
   }
 
   function loadPresets() {
@@ -1385,8 +1386,8 @@
           state.messageFilters = JSON.parse(JSON.stringify(preset.filters));
           elements$4.messageFilterContainer.style.display = 'block';
           elements$4.btnToggleFilter.classList.add('expanded');
-          if (callbacks$2.renderFilterConditions) callbacks$2.renderFilterConditions();
-          if (callbacks$2.renderMessageList) callbacks$2.renderMessageList();
+          if (callbacks$3.renderFilterConditions) callbacks$3.renderFilterConditions();
+          if (callbacks$3.renderMessageList) callbacks$3.renderMessageList();
           closePresetModal();
         }
       });
@@ -1489,12 +1490,13 @@
 
   let elements$2 = {};
   let port$1 = null;
-  let callbacks$1 = {
+  let callbacks$2 = {
     renderConnectionList: null,
     renderMessageList: null,
     showMessageDetail: null,
     toggleFilterContainer: null,
     handleExport: null,
+    handleImport: null,
     showSavePresetModal: null,
     showLoadPresetModal: null,
     closePresetModal: null,
@@ -1517,31 +1519,43 @@
     setupModalClickHandlers();
   }
 
-  function setCallbacks$1(cb) {
-    callbacks$1 = { ...callbacks$1, ...cb };
+  function setCallbacks$2(cb) {
+    callbacks$2 = { ...callbacks$2, ...cb };
   }
 
   function setupToolbarHandlers() {
+    elements$2.btnImport.addEventListener('click', () => {
+      elements$2.importFileInput.click();
+    });
+
+    elements$2.importFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file && callbacks$2.handleImport) {
+        await callbacks$2.handleImport(file);
+      }
+      e.target.value = '';
+    });
+
     elements$2.btnClear.addEventListener('click', () => {
       clearAllData();
-      if (callbacks$1.renderConnectionList) callbacks$1.renderConnectionList();
-      if (callbacks$1.renderMessageList) callbacks$1.renderMessageList();
+      if (callbacks$2.renderConnectionList) callbacks$2.renderConnectionList();
+      if (callbacks$2.renderMessageList) callbacks$2.renderMessageList();
       showListView();
       port$1.postMessage({ type: 'clear' });
     });
 
     elements$2.filterInput.addEventListener('input', (e) => {
       setFilter(e.target.value);
-      if (callbacks$1.renderConnectionList) callbacks$1.renderConnectionList();
+      if (callbacks$2.renderConnectionList) callbacks$2.renderConnectionList();
     });
 
     elements$2.requestTypeFilter.addEventListener('change', (e) => {
       setRequestTypeFilter(e.target.value);
-      if (callbacks$1.renderConnectionList) callbacks$1.renderConnectionList();
+      if (callbacks$2.renderConnectionList) callbacks$2.renderConnectionList();
     });
 
     elements$2.btnToggleFilter.addEventListener('click', () => {
-      if (callbacks$1.toggleFilterContainer) callbacks$1.toggleFilterContainer();
+      if (callbacks$2.toggleFilterContainer) callbacks$2.toggleFilterContainer();
     });
 
     elements$2.btnScrollTop.addEventListener('click', () => {
@@ -1583,7 +1597,7 @@
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const exportType = item.dataset.export;
-        if (callbacks$1.handleExport) callbacks$1.handleExport(exportType);
+        if (callbacks$2.handleExport) callbacks$2.handleExport(exportType);
         elements$2.exportDropdown.classList.remove('open');
       });
     });
@@ -1597,40 +1611,40 @@
 
   function setupPresetHandlers() {
     elements$2.btnSavePreset.addEventListener('click', () => {
-      if (callbacks$1.showSavePresetModal) callbacks$1.showSavePresetModal();
+      if (callbacks$2.showSavePresetModal) callbacks$2.showSavePresetModal();
     });
     elements$2.btnLoadPreset.addEventListener('click', () => {
-      if (callbacks$1.showLoadPresetModal) callbacks$1.showLoadPresetModal();
+      if (callbacks$2.showLoadPresetModal) callbacks$2.showLoadPresetModal();
     });
     elements$2.presetModalClose.addEventListener('click', () => {
-      if (callbacks$1.closePresetModal) callbacks$1.closePresetModal();
+      if (callbacks$2.closePresetModal) callbacks$2.closePresetModal();
     });
   }
 
   function setupStatsHandlers() {
     elements$2.btnStats.addEventListener('click', () => {
-      if (callbacks$1.showStatisticsModal) callbacks$1.showStatisticsModal();
+      if (callbacks$2.showStatisticsModal) callbacks$2.showStatisticsModal();
     });
     elements$2.statsModalClose.addEventListener('click', () => {
-      if (callbacks$1.closeStatisticsModal) callbacks$1.closeStatisticsModal();
+      if (callbacks$2.closeStatisticsModal) callbacks$2.closeStatisticsModal();
     });
   }
 
   function setupSavedConnectionsHandlers() {
     elements$2.btnSaveConnection.addEventListener('click', () => {
-      if (callbacks$1.showSaveConnectionModal) callbacks$1.showSaveConnectionModal();
+      if (callbacks$2.showSaveConnectionModal) callbacks$2.showSaveConnectionModal();
     });
     elements$2.btnSavedConnections.addEventListener('click', () => {
-      if (callbacks$1.showSavedConnectionsModal) callbacks$1.showSavedConnectionsModal();
+      if (callbacks$2.showSavedConnectionsModal) callbacks$2.showSavedConnectionsModal();
     });
     elements$2.savedConnectionsModalClose.addEventListener('click', () => {
-      if (callbacks$1.closeSavedConnectionsModal) callbacks$1.closeSavedConnectionsModal();
+      if (callbacks$2.closeSavedConnectionsModal) callbacks$2.closeSavedConnectionsModal();
     });
     elements$2.btnCloseSavedModal.addEventListener('click', () => {
-      if (callbacks$1.closeSavedConnectionsModal) callbacks$1.closeSavedConnectionsModal();
+      if (callbacks$2.closeSavedConnectionsModal) callbacks$2.closeSavedConnectionsModal();
     });
     elements$2.btnDeleteAllSaved.addEventListener('click', () => {
-      if (callbacks$1.deleteAllSavedConnections) callbacks$1.deleteAllSavedConnections();
+      if (callbacks$2.deleteAllSavedConnections) callbacks$2.deleteAllSavedConnections();
     });
   }
 
@@ -1656,11 +1670,11 @@
 
     elements$2.btnPin.addEventListener('click', () => {
       togglePinnedMessage(state.selectedConnectionId, state.selectedMessageId);
-      if (callbacks$1.updatePinButtonState) {
-        callbacks$1.updatePinButtonState();
+      if (callbacks$2.updatePinButtonState) {
+        callbacks$2.updatePinButtonState();
       }
-      if (callbacks$1.renderMessageList) {
-        callbacks$1.renderMessageList({ force: true });
+      if (callbacks$2.renderMessageList) {
+        callbacks$2.renderMessageList({ force: true });
       }
     });
   }
@@ -1697,33 +1711,33 @@
     elements$2.messageSearchInput.addEventListener('input', (e) => {
       setSearchQuery(e.target.value);
       elements$2.btnClearSearch.style.display = state.searchQuery ? 'block' : 'none';
-      if (callbacks$1.renderMessageList) callbacks$1.renderMessageList();
+      if (callbacks$2.renderMessageList) callbacks$2.renderMessageList();
     });
 
     elements$2.btnClearSearch.addEventListener('click', () => {
       setSearchQuery('');
       elements$2.messageSearchInput.value = '';
       elements$2.btnClearSearch.style.display = 'none';
-      if (callbacks$1.renderMessageList) callbacks$1.renderMessageList();
+      if (callbacks$2.renderMessageList) callbacks$2.renderMessageList();
     });
   }
 
   function setupModalClickHandlers() {
     elements$2.presetModal.addEventListener('click', (e) => {
       if (e.target === elements$2.presetModal) {
-        if (callbacks$1.closePresetModal) callbacks$1.closePresetModal();
+        if (callbacks$2.closePresetModal) callbacks$2.closePresetModal();
       }
     });
 
     elements$2.statsModal.addEventListener('click', (e) => {
       if (e.target === elements$2.statsModal) {
-        if (callbacks$1.closeStatisticsModal) callbacks$1.closeStatisticsModal();
+        if (callbacks$2.closeStatisticsModal) callbacks$2.closeStatisticsModal();
       }
     });
 
     elements$2.savedConnectionsModal.addEventListener('click', (e) => {
       if (e.target === elements$2.savedConnectionsModal) {
-        if (callbacks$1.closeSavedConnectionsModal) callbacks$1.closeSavedConnectionsModal();
+        if (callbacks$2.closeSavedConnectionsModal) callbacks$2.closeSavedConnectionsModal();
       }
     });
   }
@@ -1732,7 +1746,7 @@
 
 
   let elements$1 = {};
-  let callbacks = {
+  let callbacks$1 = {
     renderConnectionList: null,
     renderMessageList: null,
     selectConnection: null
@@ -1742,8 +1756,8 @@
     elements$1 = el;
   }
 
-  function setCallbacks(cb) {
-    callbacks = { ...callbacks, ...cb };
+  function setCallbacks$1(cb) {
+    callbacks$1 = { ...callbacks$1, ...cb };
   }
 
   async function showSaveConnectionModal() {
@@ -1821,8 +1835,8 @@
         closeSaveConnectionModal();
         alert('连接保存成功！');
 
-        if (callbacks.renderConnectionList) {
-          callbacks.renderConnectionList();
+        if (callbacks$1.renderConnectionList) {
+          callbacks$1.renderConnectionList();
         }
       } catch (error) {
         console.error('保存失败:', error);
@@ -1923,16 +1937,16 @@
 
       addConnection$1(connectionData);
 
-      if (callbacks.selectConnection) {
-        callbacks.selectConnection(connectionData.id);
+      if (callbacks$1.selectConnection) {
+        callbacks$1.selectConnection(connectionData.id);
       }
 
-      if (callbacks.renderConnectionList) {
-        callbacks.renderConnectionList();
+      if (callbacks$1.renderConnectionList) {
+        callbacks$1.renderConnectionList();
       }
 
-      if (callbacks.renderMessageList) {
-        callbacks.renderMessageList();
+      if (callbacks$1.renderMessageList) {
+        callbacks$1.renderMessageList();
       }
 
       closeSavedConnectionsModal();
@@ -1957,8 +1971,8 @@
         renderSavedConnectionsList(savedConnections);
       }
 
-      if (callbacks.renderConnectionList) {
-        callbacks.renderConnectionList();
+      if (callbacks$1.renderConnectionList) {
+        callbacks$1.renderConnectionList();
       }
 
       alert('连接已删除');
@@ -1984,8 +1998,8 @@
       closeSavedConnectionsModal();
       alert('所有连接已删除');
       
-      if (callbacks.renderConnectionList) {
-        callbacks.renderConnectionList();
+      if (callbacks$1.renderConnectionList) {
+        callbacks$1.renderConnectionList();
       }
     } catch (error) {
       console.error('删除失败:', error);
@@ -2114,6 +2128,34 @@
     };
   }
 
+  function getConnectionExportInfo(connection) {
+    return {
+      id: connection.id,
+      originalId: connection.originalId || null,
+      savedId: connection.savedId || null,
+      url: connection.url,
+      frameUrl: connection.frameUrl || null,
+      isIframe: Boolean(connection.isIframe),
+      source: connection.source || 'unknown',
+      requestType: getRequestType(connection.source),
+      status: connection.status,
+      createdAt: formatTimestampForExport(connection.createdAt),
+      importedAt: connection.importedAt ? formatTimestampForExport(connection.importedAt) : null,
+      messageCount: connection.messages?.length || 0
+    };
+  }
+
+  function escapeCSV(value) {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    const str = String(value);
+    if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
   function getCurrentConnectionExportData() {
     const connection = state.connections[state.selectedConnectionId];
     if (!connection) {
@@ -2123,14 +2165,7 @@
     const messages = getVisibleMessages(connection.messages);
 
     return {
-      connection: {
-        id: connection.id,
-        url: connection.url,
-        frameUrl: connection.frameUrl,
-        isIframe: connection.isIframe,
-        status: connection.status,
-        createdAt: formatTimestampForExport(connection.createdAt)
-      },
+      connection: getConnectionExportInfo(connection),
       messages: messages.map(msg => ({
         id: msg.id,
         eventType: msg.eventType,
@@ -2154,12 +2189,7 @@
       connections: connections.map(conn => {
         const messages = getVisibleMessages(conn.messages);
         return {
-          id: conn.id,
-          url: conn.url,
-          frameUrl: conn.frameUrl,
-          isIframe: conn.isIframe,
-          status: conn.status,
-          createdAt: formatTimestampForExport(conn.createdAt),
+          ...getConnectionExportInfo(conn),
           messages: messages.map(msg => ({
             id: msg.id,
             eventType: msg.eventType,
@@ -2187,21 +2217,19 @@
   function messagesToCSV(messages, connectionInfo = null) {
     const headers = ['ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
     if (connectionInfo) {
-      headers.unshift('ConnectionURL', 'ConnectionID');
+      headers.unshift(
+        'ConnectionID',
+        'ConnectionURL',
+        'RequestType',
+        'Source',
+        'Status',
+        'IsIframe',
+        'FrameURL',
+        'ConnectionCreatedAt'
+      );
     }
 
     const rows = messages.map(msg => {
-      const escapeCSV = (value) => {
-        if (value === null || value === undefined) {
-          return '';
-        }
-        const str = String(value);
-        if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      };
-
       const row = [
         escapeCSV(msg.id),
         escapeCSV(msg.eventType),
@@ -2211,7 +2239,16 @@
       ];
 
       if (connectionInfo) {
-        row.unshift(escapeCSV(connectionInfo.url), escapeCSV(connectionInfo.id));
+        row.unshift(
+          escapeCSV(connectionInfo.id),
+          escapeCSV(connectionInfo.url),
+          escapeCSV(connectionInfo.requestType),
+          escapeCSV(connectionInfo.source),
+          escapeCSV(connectionInfo.status),
+          escapeCSV(connectionInfo.isIframe),
+          escapeCSV(connectionInfo.frameUrl),
+          escapeCSV(connectionInfo.createdAt)
+        );
       }
 
       return row.join(',');
@@ -2238,7 +2275,7 @@
       timestamp: formatTimestampForExport(msg.timestamp)
     }));
 
-    const csv = messagesToCSV(formattedMessages);
+    const csv = messagesToCSV(formattedMessages, getConnectionExportInfo(connection));
     const filename = `stream-messages-${connection.id.substring(0, 8)}-${Date.now()}.csv`;
     downloadFile(csv, filename, 'text/csv');
   }
@@ -2256,8 +2293,7 @@
         allMessages.push({
           ...msg,
           timestamp: formatTimestampForExport(msg.timestamp),
-          connectionUrl: conn.url,
-          connectionId: conn.id
+          connection: getConnectionExportInfo(conn)
         });
       });
     });
@@ -2267,31 +2303,40 @@
       return;
     }
 
-    const headers = ['ConnectionID', 'ConnectionURL', 'ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
-    const rows = allMessages.map(msg => {
-      const escapeCSV = (value) => {
-        if (value === null || value === undefined) return '';
-        const str = String(value);
-        if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      };
+    const headers = [
+      'ConnectionID',
+      'ConnectionURL',
+      'RequestType',
+      'Source',
+      'Status',
+      'IsIframe',
+      'FrameURL',
+      'ConnectionCreatedAt',
+      'ID',
+      'EventType',
+      'Data',
+      'LastEventId',
+      'Timestamp'
+    ];
+    const rows = allMessages.map(msg => [
+      escapeCSV(msg.connection.id),
+      escapeCSV(msg.connection.url),
+      escapeCSV(msg.connection.requestType),
+      escapeCSV(msg.connection.source),
+      escapeCSV(msg.connection.status),
+      escapeCSV(msg.connection.isIframe),
+      escapeCSV(msg.connection.frameUrl),
+      escapeCSV(msg.connection.createdAt),
+      escapeCSV(msg.id),
+      escapeCSV(msg.eventType),
+      escapeCSV(msg.data),
+      escapeCSV(msg.lastEventId),
+      escapeCSV(msg.timestamp)
+    ].join(','));
 
-      return [
-        escapeCSV(msg.connectionId),
-        escapeCSV(msg.connectionUrl),
-        escapeCSV(msg.id),
-        escapeCSV(msg.eventType),
-        escapeCSV(msg.data),
-        escapeCSV(msg.lastEventId),
-        escapeCSV(msg.timestamp)
-      ].join(',');
-    });
-
-    const csv = [headers.join(','), ...rows].join('\n');
+    const csvWithConnectionInfo = [headers.join(','), ...rows].join('\n');
     const filename = `stream-all-messages-${Date.now()}.csv`;
-    downloadFile(csv, filename, 'text/csv');
+    downloadFile(csvWithConnectionInfo, filename, 'text/csv');
   }
 
   function handleExport(exportType) {
@@ -2330,6 +2375,163 @@
     }
   }
 
+  // Import management module
+
+
+  let callbacks = {
+    renderConnectionList: null,
+    renderMessageList: null,
+    selectConnection: null
+  };
+
+  function setCallbacks(cb) {
+    callbacks = { ...callbacks, ...cb };
+  }
+
+  async function handleImport(file) {
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      alert('目前仅支持导入 JSON 文件');
+      return;
+    }
+
+    try {
+      const text = await readFileAsText(file);
+      const data = JSON.parse(text);
+      const connections = normalizeImportData(data);
+
+      if (connections.length === 0) {
+        alert('未找到可导入的连接数据');
+        return;
+      }
+
+      connections.forEach(connection => addConnection$1(connection));
+
+      if (callbacks.renderConnectionList) {
+        callbacks.renderConnectionList();
+      }
+
+      if (callbacks.selectConnection) {
+        callbacks.selectConnection(connections[0].id);
+      } else if (callbacks.renderMessageList) {
+        state.selectedConnectionId = connections[0].id;
+        callbacks.renderMessageList({ force: true });
+      }
+
+      alert(`导入成功：${connections.length} 个连接，${connections.reduce((sum, conn) => sum + conn.messages.length, 0)} 条消息`);
+    } catch (error) {
+      console.error('[Stream Panel] Import failed:', error);
+      alert('导入失败，请确认文件是 Stream Panel 导出的 JSON 数据');
+    }
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file, 'utf-8');
+    });
+  }
+
+  function normalizeImportData(data) {
+    if (!data || typeof data !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(data.connections)) {
+      return data.connections
+        .map((connection, index) => normalizeConnection(connection, index))
+        .filter(Boolean);
+    }
+
+    if (data.connection && Array.isArray(data.messages)) {
+      return [normalizeConnection({
+        ...data.connection,
+        messages: data.messages
+      }, 0)].filter(Boolean);
+    }
+
+    if (isConnectionLike(data)) {
+      return [normalizeConnection(data, 0)].filter(Boolean);
+    }
+
+    return [];
+  }
+
+  function isConnectionLike(data) {
+    return data &&
+      typeof data === 'object' &&
+      typeof data.url === 'string' &&
+      Array.isArray(data.messages);
+  }
+
+  function normalizeConnection(connection, index) {
+    if (!connection || typeof connection !== 'object' || !Array.isArray(connection.messages)) {
+      return null;
+    }
+
+    const importedAt = Date.now();
+    const originalId = connection.originalId || connection.id || `import-source-${index}`;
+    const createdAt = parseTimestamp(connection.createdAt, importedAt);
+    const id = generateImportedId(index);
+
+    return {
+      id,
+      originalId,
+      importedAt,
+      url: connection.url || 'unknown',
+      frameUrl: connection.frameUrl || null,
+      isIframe: Boolean(connection.isIframe),
+      source: connection.source || connection.requestType || 'imported',
+      status: 'archived',
+      createdAt,
+      messages: connection.messages.map((message, messageIndex) => normalizeMessage(message, messageIndex))
+    };
+  }
+
+  function normalizeMessage(message, index) {
+    const fallbackTimestamp = Date.now();
+
+    if (!message || typeof message !== 'object') {
+      return {
+        id: index + 1,
+        eventType: 'message',
+        data: String(message ?? ''),
+        lastEventId: '',
+        timestamp: fallbackTimestamp
+      };
+    }
+
+    return {
+      id: Number.isFinite(Number(message.id)) ? Number(message.id) : index + 1,
+      eventType: message.eventType || 'message',
+      data: typeof message.data === 'string' ? message.data : JSON.stringify(message.data ?? ''),
+      lastEventId: message.lastEventId || '',
+      timestamp: parseTimestamp(message.timestamp, fallbackTimestamp)
+    };
+  }
+
+  function parseTimestamp(value, fallback) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return fallback;
+  }
+
+  function generateImportedId(index) {
+    return `imported-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
   // Main panel entry point
 
   // Enable debug mode
@@ -2345,6 +2547,8 @@
     detailTitle: document.getElementById('detail-title'),
     detailJson: document.getElementById('detail-json'),
     btnClear: document.getElementById('btn-clear'),
+    btnImport: document.getElementById('btn-import'),
+    importFileInput: document.getElementById('import-file-input'),
     btnBack: document.getElementById('btn-back'),
     btnCopy: document.getElementById('btn-copy'),
     btnPin: document.getElementById('btn-pin'),
@@ -2439,25 +2643,26 @@
   // Setup callbacks between modules to avoid circular dependencies
   function setupModuleCallbacks() {
     // Connection manager callbacks
-    setCallbacks$5({
+    setCallbacks$6({
       renderMessageList,
       showListView,
       renderFilterConditions
     });
 
     // Message renderer callbacks
-    setCallbacks$4({
+    setCallbacks$5({
       filterMessages,
       searchMessages
     });
 
     // Event handlers callbacks
-    setCallbacks$1({
+    setCallbacks$2({
       renderConnectionList,
       renderMessageList,
       showMessageDetail,
       toggleFilterContainer,
       handleExport,
+      handleImport,
       showSavePresetModal,
       showLoadPresetModal,
       closePresetModal,
@@ -2471,18 +2676,25 @@
     });
 
     // Filter manager callbacks
-    setCallbacks$3({
+    setCallbacks$4({
       renderMessageList,
       updateFilterStats
     });
 
     // Preset manager callbacks
-    setCallbacks$2({
+    setCallbacks$3({
       renderMessageList,
       renderFilterConditions
     });
 
     // Saved connections manager callbacks
+    setCallbacks$1({
+      renderConnectionList,
+      renderMessageList,
+      selectConnection
+    });
+
+    // Import manager callbacks
     setCallbacks({
       renderConnectionList,
       renderMessageList,

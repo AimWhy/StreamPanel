@@ -1,7 +1,7 @@
 // Export management module
 
 import { state } from './state.js';
-import { formatTimestampForExport, downloadFile } from './utils.js';
+import { formatTimestampForExport, downloadFile, getRequestType } from './utils.js';
 import { filterMessages } from './filterManager.js';
 import { searchMessages } from './searchManager.js';
 
@@ -16,6 +16,34 @@ function getAppliedFiltersMetadata() {
   };
 }
 
+function getConnectionExportInfo(connection) {
+  return {
+    id: connection.id,
+    originalId: connection.originalId || null,
+    savedId: connection.savedId || null,
+    url: connection.url,
+    frameUrl: connection.frameUrl || null,
+    isIframe: Boolean(connection.isIframe),
+    source: connection.source || 'unknown',
+    requestType: getRequestType(connection.source),
+    status: connection.status,
+    createdAt: formatTimestampForExport(connection.createdAt),
+    importedAt: connection.importedAt ? formatTimestampForExport(connection.importedAt) : null,
+    messageCount: connection.messages?.length || 0
+  };
+}
+
+function escapeCSV(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const str = String(value);
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
 export function getCurrentConnectionExportData() {
   const connection = state.connections[state.selectedConnectionId];
   if (!connection) {
@@ -25,14 +53,7 @@ export function getCurrentConnectionExportData() {
   const messages = getVisibleMessages(connection.messages);
 
   return {
-    connection: {
-      id: connection.id,
-      url: connection.url,
-      frameUrl: connection.frameUrl,
-      isIframe: connection.isIframe,
-      status: connection.status,
-      createdAt: formatTimestampForExport(connection.createdAt)
-    },
+    connection: getConnectionExportInfo(connection),
     messages: messages.map(msg => ({
       id: msg.id,
       eventType: msg.eventType,
@@ -56,12 +77,7 @@ export function getAllConnectionsExportData() {
     connections: connections.map(conn => {
       const messages = getVisibleMessages(conn.messages);
       return {
-        id: conn.id,
-        url: conn.url,
-        frameUrl: conn.frameUrl,
-        isIframe: conn.isIframe,
-        status: conn.status,
-        createdAt: formatTimestampForExport(conn.createdAt),
+        ...getConnectionExportInfo(conn),
         messages: messages.map(msg => ({
           id: msg.id,
           eventType: msg.eventType,
@@ -89,21 +105,19 @@ export function exportToJSON(data, filename) {
 export function messagesToCSV(messages, connectionInfo = null) {
   const headers = ['ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
   if (connectionInfo) {
-    headers.unshift('ConnectionURL', 'ConnectionID');
+    headers.unshift(
+      'ConnectionID',
+      'ConnectionURL',
+      'RequestType',
+      'Source',
+      'Status',
+      'IsIframe',
+      'FrameURL',
+      'ConnectionCreatedAt'
+    );
   }
 
   const rows = messages.map(msg => {
-    const escapeCSV = (value) => {
-      if (value === null || value === undefined) {
-        return '';
-      }
-      const str = String(value);
-      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
-
     const row = [
       escapeCSV(msg.id),
       escapeCSV(msg.eventType),
@@ -113,7 +127,16 @@ export function messagesToCSV(messages, connectionInfo = null) {
     ];
 
     if (connectionInfo) {
-      row.unshift(escapeCSV(connectionInfo.url), escapeCSV(connectionInfo.id));
+      row.unshift(
+        escapeCSV(connectionInfo.id),
+        escapeCSV(connectionInfo.url),
+        escapeCSV(connectionInfo.requestType),
+        escapeCSV(connectionInfo.source),
+        escapeCSV(connectionInfo.status),
+        escapeCSV(connectionInfo.isIframe),
+        escapeCSV(connectionInfo.frameUrl),
+        escapeCSV(connectionInfo.createdAt)
+      );
     }
 
     return row.join(',');
@@ -140,7 +163,7 @@ export function exportCurrentToCSV() {
     timestamp: formatTimestampForExport(msg.timestamp)
   }));
 
-  const csv = messagesToCSV(formattedMessages);
+  const csv = messagesToCSV(formattedMessages, getConnectionExportInfo(connection));
   const filename = `stream-messages-${connection.id.substring(0, 8)}-${Date.now()}.csv`;
   downloadFile(csv, filename, 'text/csv');
 }
@@ -158,8 +181,7 @@ export function exportAllToCSV() {
       allMessages.push({
         ...msg,
         timestamp: formatTimestampForExport(msg.timestamp),
-        connectionUrl: conn.url,
-        connectionId: conn.id
+        connection: getConnectionExportInfo(conn)
       });
     });
   });
@@ -169,31 +191,40 @@ export function exportAllToCSV() {
     return;
   }
 
-  const headers = ['ConnectionID', 'ConnectionURL', 'ID', 'EventType', 'Data', 'LastEventId', 'Timestamp'];
-  const rows = allMessages.map(msg => {
-    const escapeCSV = (value) => {
-      if (value === null || value === undefined) return '';
-      const str = String(value);
-      if (str.includes(',') || str.includes('\n') || str.includes('"')) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
+  const headers = [
+    'ConnectionID',
+    'ConnectionURL',
+    'RequestType',
+    'Source',
+    'Status',
+    'IsIframe',
+    'FrameURL',
+    'ConnectionCreatedAt',
+    'ID',
+    'EventType',
+    'Data',
+    'LastEventId',
+    'Timestamp'
+  ];
+  const rows = allMessages.map(msg => [
+    escapeCSV(msg.connection.id),
+    escapeCSV(msg.connection.url),
+    escapeCSV(msg.connection.requestType),
+    escapeCSV(msg.connection.source),
+    escapeCSV(msg.connection.status),
+    escapeCSV(msg.connection.isIframe),
+    escapeCSV(msg.connection.frameUrl),
+    escapeCSV(msg.connection.createdAt),
+    escapeCSV(msg.id),
+    escapeCSV(msg.eventType),
+    escapeCSV(msg.data),
+    escapeCSV(msg.lastEventId),
+    escapeCSV(msg.timestamp)
+  ].join(','));
 
-    return [
-      escapeCSV(msg.connectionId),
-      escapeCSV(msg.connectionUrl),
-      escapeCSV(msg.id),
-      escapeCSV(msg.eventType),
-      escapeCSV(msg.data),
-      escapeCSV(msg.lastEventId),
-      escapeCSV(msg.timestamp)
-    ].join(',');
-  });
-
-  const csv = [headers.join(','), ...rows].join('\n');
+  const csvWithConnectionInfo = [headers.join(','), ...rows].join('\n');
   const filename = `stream-all-messages-${Date.now()}.csv`;
-  downloadFile(csv, filename, 'text/csv');
+  downloadFile(csvWithConnectionInfo, filename, 'text/csv');
 }
 
 export function handleExport(exportType) {

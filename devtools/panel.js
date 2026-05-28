@@ -12,6 +12,7 @@ import { state } from './modules/state.js';
 import { log } from './modules/utils.js';
 import { searchMessages } from './modules/searchManager.js';
 import { handleExport } from './modules/exportManager.js';
+import { handleImport, setCallbacks as setImportCallbacks } from './modules/importManager.js';
 
 // Enable debug mode
 window.__STREAM_PANEL_DEBUG__ = false;
@@ -26,6 +27,8 @@ const elements = {
   detailTitle: document.getElementById('detail-title'),
   detailJson: document.getElementById('detail-json'),
   btnClear: document.getElementById('btn-clear'),
+  btnImport: document.getElementById('btn-import'),
+  importFileInput: document.getElementById('import-file-input'),
   btnBack: document.getElementById('btn-back'),
   btnCopy: document.getElementById('btn-copy'),
   btnPin: document.getElementById('btn-pin'),
@@ -139,6 +142,7 @@ function setupModuleCallbacks() {
     showMessageDetail,
     toggleFilterContainer,
     handleExport,
+    handleImport,
     showSavePresetModal,
     showLoadPresetModal,
     closePresetModal,
@@ -165,6 +169,13 @@ function setupModuleCallbacks() {
 
   // Saved connections manager callbacks
   setSavedConnectionsCallbacks({
+    renderConnectionList,
+    renderMessageList,
+    selectConnection
+  });
+
+  // Import manager callbacks
+  setImportCallbacks({
     renderConnectionList,
     renderMessageList,
     selectConnection
