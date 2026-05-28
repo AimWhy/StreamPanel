@@ -1759,7 +1759,17 @@
 
     elements$2.displayFieldInput.addEventListener('input', (e) => {
       setDisplayFieldPath(e.target.value.trim());
+      elements$2.btnClearDisplayField.style.display = state.displayFieldPath ? 'flex' : 'none';
       if (callbacks$2.renderMessageList) callbacks$2.renderMessageList({ force: true });
+    });
+
+    elements$2.btnClearDisplayField.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setDisplayFieldPath('');
+      elements$2.displayFieldInput.value = '';
+      elements$2.btnClearDisplayField.style.display = 'none';
+      if (callbacks$2.renderMessageList) callbacks$2.renderMessageList({ force: true });
+      elements$2.displayFieldInput.focus();
     });
 
     elements$2.btnToggleFilter.addEventListener('click', () => {
@@ -2838,6 +2848,7 @@
     textDecodeCopyBtn: document.getElementById('text-decode-copy-btn'),
     requestTypeFilter: document.getElementById('request-type-filter'),
     displayFieldInput: document.getElementById('display-field-input'),
+    btnClearDisplayField: document.getElementById('btn-clear-display-field'),
     messageFilterContainer: document.getElementById('message-filter-container'),
     filterConditions: document.getElementById('filter-conditions'),
     filterStats: document.getElementById('filter-stats'),

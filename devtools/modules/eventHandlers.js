@@ -81,7 +81,17 @@ function setupToolbarHandlers() {
 
   elements.displayFieldInput.addEventListener('input', (e) => {
     setDisplayFieldPath(e.target.value.trim());
+    elements.btnClearDisplayField.style.display = state.displayFieldPath ? 'flex' : 'none';
     if (callbacks.renderMessageList) callbacks.renderMessageList({ force: true });
+  });
+
+  elements.btnClearDisplayField.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setDisplayFieldPath('');
+    elements.displayFieldInput.value = '';
+    elements.btnClearDisplayField.style.display = 'none';
+    if (callbacks.renderMessageList) callbacks.renderMessageList({ force: true });
+    elements.displayFieldInput.focus();
   });
 
   elements.btnToggleFilter.addEventListener('click', () => {

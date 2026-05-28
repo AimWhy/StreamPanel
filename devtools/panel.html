@@ -196,7 +196,15 @@
               <div class="message-cell col-data">
                 <div class="data-header-content">
                   <span>数据</span>
-                  <input type="text" id="display-field-input" class="display-field-input" placeholder="字段 path，如 choices.0.delta.content" title="输入 JSON 字段 path，仅改变列表数据列展示">
+                  <div class="display-field-control">
+                    <input type="text" id="display-field-input" class="display-field-input" placeholder="字段 path，如 choices.0.delta.content" title="输入 JSON 字段 path，仅改变列表数据列展示">
+                    <button id="btn-clear-display-field" class="clear-display-field-btn" title="清空字段 path" style="display: none;">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div class="col-resizer" data-col="data"></div>
               </div>

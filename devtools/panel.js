@@ -43,6 +43,7 @@ const elements = {
   textDecodeCopyBtn: document.getElementById('text-decode-copy-btn'),
   requestTypeFilter: document.getElementById('request-type-filter'),
   displayFieldInput: document.getElementById('display-field-input'),
+  btnClearDisplayField: document.getElementById('btn-clear-display-field'),
   messageFilterContainer: document.getElementById('message-filter-container'),
   filterConditions: document.getElementById('filter-conditions'),
   filterStats: document.getElementById('filter-stats'),
