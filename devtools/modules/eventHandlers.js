@@ -1,6 +1,6 @@
 // Event handlers module
 
-import { state, setFilter, setRequestTypeFilter, setSearchQuery, clearAllData, setAutoScrollToBottom, togglePinnedMessage } from './state.js';
+import { state, setFilter, setRequestTypeFilter, setSearchQuery, setDisplayFieldPath, clearAllData, setAutoScrollToBottom, togglePinnedMessage } from './state.js';
 import { showListView, showDetailView } from './viewManager.js';
 import { copyToClipboard, log } from './utils.js';
 
@@ -68,6 +68,19 @@ function setupToolbarHandlers() {
   elements.requestTypeFilter.addEventListener('change', (e) => {
     setRequestTypeFilter(e.target.value);
     if (callbacks.renderConnectionList) callbacks.renderConnectionList();
+  });
+
+  elements.displayFieldInput.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+
+  elements.displayFieldInput.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+  });
+
+  elements.displayFieldInput.addEventListener('input', (e) => {
+    setDisplayFieldPath(e.target.value.trim());
+    if (callbacks.renderMessageList) callbacks.renderMessageList({ force: true });
   });
 
   elements.btnToggleFilter.addEventListener('click', () => {

@@ -184,7 +184,13 @@
             <div class="message-row message-header">
               <div class="message-cell col-id">ID<div class="col-resizer" data-col="id"></div></div>
               <div class="message-cell col-type">类型<div class="col-resizer" data-col="type"></div></div>
-              <div class="message-cell col-data">数据<div class="col-resizer" data-col="data"></div></div>
+              <div class="message-cell col-data">
+                <div class="data-header-content">
+                  <span>数据</span>
+                  <input type="text" id="display-field-input" class="display-field-input" placeholder="字段 path，如 choices.0.delta.content" title="输入 JSON 字段 path，仅改变列表数据列展示">
+                </div>
+                <div class="col-resizer" data-col="data"></div>
+              </div>
               <div class="message-cell col-time">时间</div>
             </div>
             <!-- Body -->

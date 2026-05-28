@@ -10,6 +10,7 @@ export const state = {
   messageFilters: [],
   pendingFilters: [],
   searchQuery: '',
+  displayFieldPath: '',
   autoScrollToBottom: true
 };
 
@@ -47,6 +48,10 @@ export function setPendingFilters(filters) {
 
 export function setSearchQuery(query) {
   state.searchQuery = query;
+}
+
+export function setDisplayFieldPath(path) {
+  state.displayFieldPath = path;
 }
 
 export function setAutoScrollToBottom(enabled) {

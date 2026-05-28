@@ -35,6 +35,7 @@ const elements = {
   btnStats: document.getElementById('btn-stats'),
   filterInput: document.getElementById('filter-input'),
   requestTypeFilter: document.getElementById('request-type-filter'),
+  displayFieldInput: document.getElementById('display-field-input'),
   messageFilterContainer: document.getElementById('message-filter-container'),
   filterConditions: document.getElementById('filter-conditions'),
   filterStats: document.getElementById('filter-stats'),
