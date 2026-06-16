@@ -1,6 +1,6 @@
 // Main panel entry point
 import { initConnectionManager, handleStreamEvent, renderConnectionList, selectConnection, setCallbacks as setConnectionCallbacks } from './modules/connectionManager.js';
-import { initMessageRenderer, renderMessageList, showMessageDetail, updateFilterStats, updatePinButtonState, setCallbacks as setMessageRendererCallbacks } from './modules/messageRenderer.js';
+import { initMessageRenderer, renderMessageList, showMessageDetail, showAdjacentMessage, updateFilterStats, updatePinButtonState, setCallbacks as setMessageRendererCallbacks } from './modules/messageRenderer.js';
 import { initViewManager, showListView, showDetailView } from './modules/viewManager.js';
 import { initFilterManager, renderFilterConditions, addFilterCondition, clearAllFilters, applyFilters, filterMessages, toggleFilterContainer, setCallbacks as setFilterManagerCallbacks } from './modules/filterManager.js';
 import { initPresetManager, closePresetModal, showSavePresetModal, showLoadPresetModal, setCallbacks as setPresetManagerCallbacks } from './modules/presetManager.js';
@@ -30,6 +30,8 @@ const elements = {
   btnImport: document.getElementById('btn-import'),
   importFileInput: document.getElementById('import-file-input'),
   btnBack: document.getElementById('btn-back'),
+  btnPrevMessage: document.getElementById('btn-prev-message'),
+  btnNextMessage: document.getElementById('btn-next-message'),
   btnCopy: document.getElementById('btn-copy'),
   btnPin: document.getElementById('btn-pin'),
   btnStats: document.getElementById('btn-stats'),
@@ -149,6 +151,7 @@ function setupModuleCallbacks() {
     renderConnectionList,
     renderMessageList,
     showMessageDetail,
+    showAdjacentMessage,
     toggleFilterContainer,
     handleExport,
     handleImport,

@@ -610,19 +610,11 @@
     elements$6.messageEmpty.style.display = 'none';
     elements$6.messageTbody.parentElement.style.display = 'flex';
 
-    let filteredMessages = connection.messages;
-    if (callbacks$5.filterMessages) {
-      filteredMessages = callbacks$5.filterMessages(connection.messages);
-    }
-    if (callbacks$5.searchMessages) {
-      filteredMessages = callbacks$5.searchMessages(filteredMessages, state.searchQuery);
-    }
+    const filteredMessages = getFilteredMessages(connection);
 
     updateFilterStats(filteredMessages.length, connection.messages.length);
 
-    const pinnedMessages = filteredMessages.filter(msg => isMessagePinned(state.selectedConnectionId, msg.id));
-    const normalMessages = filteredMessages.filter(msg => !isMessagePinned(state.selectedConnectionId, msg.id));
-    const displayMessages = [...pinnedMessages, ...normalMessages];
+    const displayMessages = getDisplayMessages(filteredMessages);
 
     const currentConnectionId = state.selectedConnectionId;
     const currentMessageCount = displayMessages.length;
@@ -713,7 +705,9 @@
     const hasSearch = state.searchQuery.length > 0;
     const isPinned = isMessagePinned(state.selectedConnectionId, msg.id);
 
-    row.className = `message-row ${hasSearch ? 'search-highlight' : ''} ${isPinned ? 'pinned' : ''}`;
+    const isSelected = state.selectedMessageId === msg.id;
+
+    row.className = `message-row ${hasSearch ? 'search-highlight' : ''} ${isPinned ? 'pinned' : ''} ${isSelected ? 'selected' : ''}`;
     row.dataset.id = msg.id;
 
     const idCell = document.createElement('div');
@@ -763,6 +757,7 @@
     if (!message) return;
 
     state.selectedMessageId = messageId;
+    updateSelectedMessageRow(messageId);
 
     elements$6.detailTitle.textContent = `消息 #${messageId} - ${message.eventType}`;
 
@@ -776,6 +771,7 @@
 
     elements$6.detailJson.innerHTML = formattedData;
     updatePinButtonState();
+    updateDetailNavButtons();
     showDetailView();
   }
 
@@ -783,6 +779,32 @@
     const isPinned = isMessagePinned(state.selectedConnectionId, state.selectedMessageId);
     elements$6.btnPin.classList.toggle('active', isPinned);
     elements$6.btnPin.title = isPinned ? '取消置顶此消息' : '置顶此消息';
+    updateDetailNavButtons();
+  }
+
+  function showAdjacentMessage(direction) {
+    const adjacentMessage = getAdjacentMessage(direction);
+    if (!adjacentMessage) return;
+
+    showMessageDetail(adjacentMessage.id);
+    scrollMessageRowIntoView(adjacentMessage.id);
+  }
+
+  function updateDetailNavButtons() {
+    if (!elements$6.btnPrevMessage || !elements$6.btnNextMessage) return;
+
+    const previousMessage = getAdjacentMessage(-1);
+    const nextMessage = getAdjacentMessage(1);
+
+    elements$6.btnPrevMessage.disabled = !previousMessage;
+    elements$6.btnPrevMessage.title = previousMessage
+      ? `查看上一条消息 #${previousMessage.id}`
+      : '已经是第一条消息';
+
+    elements$6.btnNextMessage.disabled = !nextMessage;
+    elements$6.btnNextMessage.title = nextMessage
+      ? `查看下一条消息 #${nextMessage.id}`
+      : '已经是最后一条消息';
   }
 
   function updateFilterStats(filteredCount, totalCount) {
@@ -796,6 +818,54 @@
     } else {
       elements$6.filterStats.textContent = `显示 ${filteredCount}/${totalCount} 条消息`;
     }
+  }
+
+  function getFilteredMessages(connection) {
+    let filteredMessages = connection.messages;
+    if (callbacks$5.filterMessages) {
+      filteredMessages = callbacks$5.filterMessages(connection.messages);
+    }
+    if (callbacks$5.searchMessages) {
+      filteredMessages = callbacks$5.searchMessages(filteredMessages, state.searchQuery);
+    }
+    return filteredMessages;
+  }
+
+  function getCurrentDisplayMessages() {
+    const connection = state.connections[state.selectedConnectionId];
+    if (!connection) return [];
+
+    return getDisplayMessages(getFilteredMessages(connection));
+  }
+
+  function getDisplayMessages(messages) {
+    const pinnedMessages = messages.filter(msg => isMessagePinned(state.selectedConnectionId, msg.id));
+    const normalMessages = messages.filter(msg => !isMessagePinned(state.selectedConnectionId, msg.id));
+    return [...pinnedMessages, ...normalMessages];
+  }
+
+  function getAdjacentMessage(direction) {
+    const displayMessages = getCurrentDisplayMessages();
+    const currentIndex = displayMessages.findIndex(msg => msg.id === state.selectedMessageId);
+    if (currentIndex === -1) return null;
+
+    return displayMessages[currentIndex + direction] || null;
+  }
+
+  function scrollMessageRowIntoView(messageId) {
+    const row = elements$6.messageTbody?.querySelector(`.message-row[data-id="${messageId}"]`);
+    if (!row) return;
+
+    row.scrollIntoView({ block: 'nearest' });
+  }
+
+  function updateSelectedMessageRow(messageId) {
+    elements$6.messageTbody
+      ?.querySelectorAll('.message-row.selected')
+      .forEach(row => row.classList.remove('selected'));
+
+    const row = elements$6.messageTbody?.querySelector(`.message-row[data-id="${messageId}"]`);
+    row?.classList.add('selected');
   }
 
   function highlightSearchMatches(text, query) {
@@ -1688,6 +1758,7 @@
     renderConnectionList: null,
     renderMessageList: null,
     showMessageDetail: null,
+    showAdjacentMessage: null,
     toggleFilterContainer: null,
     handleExport: null,
     handleImport: null,
@@ -1869,6 +1940,18 @@
   function setupDetailHandlers() {
     elements$2.btnBack.addEventListener('click', () => {
       showListView();
+    });
+
+    elements$2.btnPrevMessage.addEventListener('click', () => {
+      if (callbacks$2.showAdjacentMessage) {
+        callbacks$2.showAdjacentMessage(-1);
+      }
+    });
+
+    elements$2.btnNextMessage.addEventListener('click', () => {
+      if (callbacks$2.showAdjacentMessage) {
+        callbacks$2.showAdjacentMessage(1);
+      }
     });
 
     elements$2.btnCopy.addEventListener('click', async () => {
@@ -2835,6 +2918,8 @@
     btnImport: document.getElementById('btn-import'),
     importFileInput: document.getElementById('import-file-input'),
     btnBack: document.getElementById('btn-back'),
+    btnPrevMessage: document.getElementById('btn-prev-message'),
+    btnNextMessage: document.getElementById('btn-next-message'),
     btnCopy: document.getElementById('btn-copy'),
     btnPin: document.getElementById('btn-pin'),
     btnStats: document.getElementById('btn-stats'),
@@ -2954,6 +3039,7 @@
       renderConnectionList,
       renderMessageList,
       showMessageDetail,
+      showAdjacentMessage,
       toggleFilterContainer,
       handleExport,
       handleImport,

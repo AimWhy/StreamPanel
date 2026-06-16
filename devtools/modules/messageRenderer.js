@@ -45,19 +45,11 @@ export function renderMessageList(options = {}) {
   elements.messageEmpty.style.display = 'none';
   elements.messageTbody.parentElement.style.display = 'flex';
 
-  let filteredMessages = connection.messages;
-  if (callbacks.filterMessages) {
-    filteredMessages = callbacks.filterMessages(connection.messages);
-  }
-  if (callbacks.searchMessages) {
-    filteredMessages = callbacks.searchMessages(filteredMessages, state.searchQuery);
-  }
+  const filteredMessages = getFilteredMessages(connection);
 
   updateFilterStats(filteredMessages.length, connection.messages.length);
 
-  const pinnedMessages = filteredMessages.filter(msg => isMessagePinned(state.selectedConnectionId, msg.id));
-  const normalMessages = filteredMessages.filter(msg => !isMessagePinned(state.selectedConnectionId, msg.id));
-  const displayMessages = [...pinnedMessages, ...normalMessages];
+  const displayMessages = getDisplayMessages(filteredMessages);
 
   const currentConnectionId = state.selectedConnectionId;
   const currentMessageCount = displayMessages.length;
@@ -148,7 +140,9 @@ function createMessageRow(msg) {
   const hasSearch = state.searchQuery.length > 0;
   const isPinned = isMessagePinned(state.selectedConnectionId, msg.id);
 
-  row.className = `message-row ${hasSearch ? 'search-highlight' : ''} ${isPinned ? 'pinned' : ''}`;
+  const isSelected = state.selectedMessageId === msg.id;
+
+  row.className = `message-row ${hasSearch ? 'search-highlight' : ''} ${isPinned ? 'pinned' : ''} ${isSelected ? 'selected' : ''}`;
   row.dataset.id = msg.id;
 
   const idCell = document.createElement('div');
@@ -198,6 +192,7 @@ export function showMessageDetail(messageId) {
   if (!message) return;
 
   state.selectedMessageId = messageId;
+  updateSelectedMessageRow(messageId);
 
   elements.detailTitle.textContent = `消息 #${messageId} - ${message.eventType}`;
 
@@ -211,6 +206,7 @@ export function showMessageDetail(messageId) {
 
   elements.detailJson.innerHTML = formattedData;
   updatePinButtonState();
+  updateDetailNavButtons();
   showDetailView();
 }
 
@@ -218,6 +214,32 @@ export function updatePinButtonState() {
   const isPinned = isMessagePinned(state.selectedConnectionId, state.selectedMessageId);
   elements.btnPin.classList.toggle('active', isPinned);
   elements.btnPin.title = isPinned ? '取消置顶此消息' : '置顶此消息';
+  updateDetailNavButtons();
+}
+
+export function showAdjacentMessage(direction) {
+  const adjacentMessage = getAdjacentMessage(direction);
+  if (!adjacentMessage) return;
+
+  showMessageDetail(adjacentMessage.id);
+  scrollMessageRowIntoView(adjacentMessage.id);
+}
+
+export function updateDetailNavButtons() {
+  if (!elements.btnPrevMessage || !elements.btnNextMessage) return;
+
+  const previousMessage = getAdjacentMessage(-1);
+  const nextMessage = getAdjacentMessage(1);
+
+  elements.btnPrevMessage.disabled = !previousMessage;
+  elements.btnPrevMessage.title = previousMessage
+    ? `查看上一条消息 #${previousMessage.id}`
+    : '已经是第一条消息';
+
+  elements.btnNextMessage.disabled = !nextMessage;
+  elements.btnNextMessage.title = nextMessage
+    ? `查看下一条消息 #${nextMessage.id}`
+    : '已经是最后一条消息';
 }
 
 export function updateFilterStats(filteredCount, totalCount) {
@@ -231,6 +253,54 @@ export function updateFilterStats(filteredCount, totalCount) {
   } else {
     elements.filterStats.textContent = `显示 ${filteredCount}/${totalCount} 条消息`;
   }
+}
+
+function getFilteredMessages(connection) {
+  let filteredMessages = connection.messages;
+  if (callbacks.filterMessages) {
+    filteredMessages = callbacks.filterMessages(connection.messages);
+  }
+  if (callbacks.searchMessages) {
+    filteredMessages = callbacks.searchMessages(filteredMessages, state.searchQuery);
+  }
+  return filteredMessages;
+}
+
+function getCurrentDisplayMessages() {
+  const connection = state.connections[state.selectedConnectionId];
+  if (!connection) return [];
+
+  return getDisplayMessages(getFilteredMessages(connection));
+}
+
+function getDisplayMessages(messages) {
+  const pinnedMessages = messages.filter(msg => isMessagePinned(state.selectedConnectionId, msg.id));
+  const normalMessages = messages.filter(msg => !isMessagePinned(state.selectedConnectionId, msg.id));
+  return [...pinnedMessages, ...normalMessages];
+}
+
+function getAdjacentMessage(direction) {
+  const displayMessages = getCurrentDisplayMessages();
+  const currentIndex = displayMessages.findIndex(msg => msg.id === state.selectedMessageId);
+  if (currentIndex === -1) return null;
+
+  return displayMessages[currentIndex + direction] || null;
+}
+
+function scrollMessageRowIntoView(messageId) {
+  const row = elements.messageTbody?.querySelector(`.message-row[data-id="${messageId}"]`);
+  if (!row) return;
+
+  row.scrollIntoView({ block: 'nearest' });
+}
+
+function updateSelectedMessageRow(messageId) {
+  elements.messageTbody
+    ?.querySelectorAll('.message-row.selected')
+    .forEach(row => row.classList.remove('selected'));
+
+  const row = elements.messageTbody?.querySelector(`.message-row[data-id="${messageId}"]`);
+  row?.classList.add('selected');
 }
 
 export function highlightSearchMatches(text, query) {

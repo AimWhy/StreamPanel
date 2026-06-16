@@ -10,6 +10,7 @@ let callbacks = {
   renderConnectionList: null,
   renderMessageList: null,
   showMessageDetail: null,
+  showAdjacentMessage: null,
   toggleFilterContainer: null,
   handleExport: null,
   handleImport: null,
@@ -191,6 +192,18 @@ function setupSavedConnectionsHandlers() {
 function setupDetailHandlers() {
   elements.btnBack.addEventListener('click', () => {
     showListView();
+  });
+
+  elements.btnPrevMessage.addEventListener('click', () => {
+    if (callbacks.showAdjacentMessage) {
+      callbacks.showAdjacentMessage(-1);
+    }
+  });
+
+  elements.btnNextMessage.addEventListener('click', () => {
+    if (callbacks.showAdjacentMessage) {
+      callbacks.showAdjacentMessage(1);
+    }
   });
 
   elements.btnCopy.addEventListener('click', async () => {

@@ -73,6 +73,20 @@ html, body {
   background-color: var(--bg-hover);
 }
 
+.toolbar-btn:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.toolbar-btn:disabled:hover {
+  background: transparent;
+}
+
+.detail-nav-btn {
+  padding: 4px 6px;
+}
+
 .toggle-btn {
   position: relative;
 }
